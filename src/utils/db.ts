@@ -1,11 +1,13 @@
 import type { AudioTrack, Playlist } from '../types/music';
 
 const DB_NAME = 'morinote-audio-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORE_TRACKS = 'tracks';
 const STORE_BLOBS = 'audioBlobs';
 const STORE_PLAYLISTS = 'playlists';
+const STORE_HANDLES = 'handles';
+const MUSIC_DIR_KEY = 'music_directory_handle';
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -20,6 +22,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_PLAYLISTS)) {
         db.createObjectStore(STORE_PLAYLISTS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORE_HANDLES)) {
+        db.createObjectStore(STORE_HANDLES);
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -105,6 +110,41 @@ export async function deletePlaylistFromDB(playlistId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_PLAYLISTS, 'readwrite');
     tx.objectStore(STORE_PLAYLISTS).delete(playlistId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export interface PersistableDirectoryHandle extends FileSystemDirectoryHandle {
+  queryPermission?: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+  requestPermission?: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+}
+
+export async function saveMusicDirHandle(handle: PersistableDirectoryHandle): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_HANDLES, 'readwrite');
+    tx.objectStore(STORE_HANDLES).put(handle, MUSIC_DIR_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getMusicDirHandle(): Promise<PersistableDirectoryHandle | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_HANDLES, 'readonly');
+    const req = tx.objectStore(STORE_HANDLES).get(MUSIC_DIR_KEY);
+    req.onsuccess = () => resolve((req.result as PersistableDirectoryHandle | undefined) ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function clearMusicDirHandle(): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_HANDLES, 'readwrite');
+    tx.objectStore(STORE_HANDLES).delete(MUSIC_DIR_KEY);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

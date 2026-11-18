@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Camera,
   Disc3,
   Edit3,
   Heart,
@@ -31,10 +30,15 @@ import type {
   AudioTrack,
   EqPresetId,
   RepeatMode,
+  SongBarAnimationId,
+  ThemeConfig,
 } from '../types/music';
 import { formatDuration } from '../utils/audioMetadata';
+import { getPlaybackControlPresentation } from '../utils/playbackButtons3D';
 import { AudioVisualizer } from './AudioVisualizer';
 import { ImageEditorModal } from './ImageEditorModal';
+import { NowPlayingVisualStage } from './NowPlayingVisualStage';
+import { SongProgressBar } from './SongProgressBar';
 
 interface NowPlayingPanelProps {
   track: AudioTrack | null;
@@ -48,6 +52,8 @@ interface NowPlayingPanelProps {
   shuffle: boolean;
   repeat: RepeatMode;
   moodSyncEnabled: boolean;
+  songBarAnimation?: SongBarAnimationId;
+  theme?: ThemeConfig;
   isFloatingOpen: boolean;
   isWidgetOpen: boolean;
   isAnalyzingLyrics: boolean;
@@ -55,6 +61,7 @@ interface NowPlayingPanelProps {
   settings: AppSettings;
   analyserRef: React.RefObject<AnalyserNode | null>;
   accentColor: string;
+  compactSplit?: boolean;
   t: Translations;
   onTogglePlay: () => void;
   onNext: () => void;
@@ -90,6 +97,8 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   shuffle,
   repeat,
   moodSyncEnabled,
+  songBarAnimation = 'shimmer_glow',
+  theme,
   isFloatingOpen,
   isWidgetOpen,
   isAnalyzingLyrics,
@@ -97,6 +106,7 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   settings,
   analyserRef,
   accentColor,
+  compactSplit = false,
   t,
   onTogglePlay,
   onNext,
@@ -215,7 +225,7 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
             : undefined,
       }}
     >
-      <div className="p-5 sm:p-6 space-y-5">
+      <div className={compactSplit ? 'p-4 space-y-3.5' : 'p-5 sm:p-6 space-y-5'}>
         {/* Top Track Header & Actions */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -296,68 +306,33 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
           </div>
         </div>
 
-        {/* Cover Art + Mood Aura + Direct Gallery Cover Change */}
+        {/* Customizable Visual Stage (Cover / Vinyl / CD / Cassette / Equalizer / etc.) */}
         <div className="flex flex-col items-center">
-          <div className="relative w-52 h-52 sm:w-56 sm:h-56">
-            {/* Mood-synced breathing halo */}
-            {moodSyncEnabled && (
-              <div
-                className="absolute -inset-3 rounded-[2rem] blur-xl opacity-55 transition-all duration-700 pointer-events-none"
-                style={{
-                  backgroundColor: activeAuraColor,
-                  transform: isPlaying ? 'scale(1.03)' : 'scale(0.96)',
-                }}
-              />
-            )}
-
-            {/* Rotating disc edge */}
-            <div
-              className={`absolute inset-2 rounded-full border shadow-inner flex items-center justify-center ${
-                isPlaying ? 'vinyl-spin' : 'vinyl-spin-paused'
-              }`}
-              style={{
-                backgroundColor: 'var(--bg-surface)',
-                borderColor: 'var(--divider-color)',
-              }}
-            >
-              <div
-                className="w-12 h-12 rounded-full border"
-                style={{ borderColor: 'var(--divider-color)' }}
-              />
-            </div>
-
-            <div
-              className="relative z-10 w-full h-full rounded-3xl overflow-hidden shadow-lg border group"
-              style={{
-                borderColor: 'var(--divider-color)',
-                backgroundColor: 'var(--bg-surface)',
-              }}
-            >
-              <img
-                src={track.coverUrl}
-                alt={track.title}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => quickCoverInputRef.current?.click()}
-                title={t.changeCover}
-                aria-label={t.changeCover}
-                className="absolute bottom-2.5 right-2.5 z-20 min-w-[38px] min-h-[38px] px-2.5 rounded-xl bg-black/55 text-white backdrop-blur-md flex items-center gap-1.5 text-[11px] font-medium opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                <span>Portada</span>
-              </button>
-              <input
-                ref={quickCoverInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleQuickCoverChange}
-              />
-            </div>
-          </div>
+          <NowPlayingVisualStage
+            visualId={settings.nowPlayingVisual ?? 'cover_classic'}
+            colorMode={settings.nowPlayingColorMode ?? 'theme'}
+            primaryColor={settings.nowPlayingPrimaryColor || accentColor}
+            secondaryColor={settings.nowPlayingSecondaryColor || '#FFF5F8'}
+            stageAccentColor={settings.nowPlayingAccentColor || '#E5C185'}
+            stageDetailColor={settings.nowPlayingDetailColor || '#2E2A36'}
+            hideCover={settings.nowPlayingHideCover ?? false}
+            coverUrl={track.coverUrl}
+            trackTitle={track.title}
+            trackArtist={track.artist}
+            isPlaying={isPlaying}
+            moodSyncEnabled={moodSyncEnabled}
+            activeAuraColor={activeAuraColor}
+            compactSplit={compactSplit}
+            onChangeCoverClick={() => quickCoverInputRef.current?.click()}
+            changeCoverLabel={t.changeCover}
+          />
+          <input
+            ref={quickCoverInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleQuickCoverChange}
+          />
 
           {track.lyrics && (
             <div className="mt-3 text-center">
@@ -384,35 +359,13 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
 
         {/* Progress Scrubber */}
         <div className="space-y-1.5">
-          <div className="relative h-6 flex items-center group">
-            <div className="w-full h-2 rounded-full bg-black/10 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-100"
-                style={{
-                  width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%`,
-                  backgroundColor: 'var(--song-bar-color)',
-                }}
-              />
-            </div>
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute w-4 h-4 rounded-full shadow border border-white/80 -translate-x-1/2 transition-transform group-hover:scale-110"
-              style={{
-                left: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%`,
-                backgroundColor: 'var(--song-bar-color)',
-              }}
-            />
-            <input
-              type="range"
-              min={0}
-              max={Math.max(1, duration)}
-              step={0.1}
-              aria-label="Progreso de reproducción"
-              value={Math.min(currentTime, duration || 1)}
-              onChange={(e) => onSeek(Number(e.target.value))}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-          </div>
+          <SongProgressBar
+            currentTime={currentTime}
+            duration={duration}
+            animation={songBarAnimation}
+            isPlaying={isPlaying}
+            onSeek={onSeek}
+          />
           <div
             className="flex items-center justify-between text-xs font-mono-nums"
             style={{ color: 'var(--text-muted)' }}
@@ -422,73 +375,68 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
           </div>
         </div>
 
-        {/* Main Playback Controls */}
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={onToggleShuffle}
-            aria-label="Aleatorio"
-            className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center transition"
-            style={{
-              backgroundColor: shuffle ? 'var(--accent-soft)' : 'transparent',
-            }}
-          >
-            <Shuffle className="w-4 h-4" />
-          </button>
+        {/* Main 3D Customizable Playback Controls */}
+        {(() => {
+          const shuffleCtrl = getPlaybackControlPresentation('aux', theme, shuffle);
+          const navCtrl = getPlaybackControlPresentation('nav', theme);
+          const playCtrl = getPlaybackControlPresentation('play', theme);
+          const repeatCtrl = getPlaybackControlPresentation('aux', theme, repeat !== 'off');
+          return (
+            <div className="flex items-center justify-between gap-2 pt-1 pb-1">
+              <button
+                type="button"
+                onClick={onToggleShuffle}
+                aria-label="Aleatorio"
+                className={`min-w-[42px] min-h-[42px] ${shuffleCtrl.className}`}
+                style={shuffleCtrl.style}
+              >
+                <Shuffle className="w-4 h-4" />
+              </button>
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onPrev}
-              aria-label="Anterior"
-              className="min-w-[46px] min-h-[46px] rounded-2xl flex items-center justify-center border transition active:scale-95"
-              style={{
-                backgroundColor: 'var(--bg-surface)',
-                borderColor: 'var(--divider-color)',
-              }}
-            >
-              <SkipBack className="w-5 h-5" />
-            </button>
+              <div className="flex items-center gap-3.5">
+                <button
+                  type="button"
+                  onClick={onPrev}
+                  aria-label="Anterior"
+                  className={`min-w-[48px] min-h-[48px] ${navCtrl.className}`}
+                  style={navCtrl.style}
+                >
+                  <SkipBack className="w-5 h-5" />
+                </button>
 
-            <button
-              type="button"
-              onClick={onTogglePlay}
-              aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
-              className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-md transition-transform active:scale-95"
-              style={{
-                backgroundColor: 'var(--accent-color)',
-                color: '#1C1B1F',
-              }}
-            >
-              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
-            </button>
+                <button
+                  type="button"
+                  onClick={onTogglePlay}
+                  aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
+                  className={`w-[60px] h-[60px] ${playCtrl.className}`}
+                  style={playCtrl.style}
+                >
+                  {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+                </button>
 
-            <button
-              type="button"
-              onClick={onNext}
-              aria-label="Siguiente"
-              className="min-w-[46px] min-h-[46px] rounded-2xl flex items-center justify-center border transition active:scale-95"
-              style={{
-                backgroundColor: 'var(--bg-surface)',
-                borderColor: 'var(--divider-color)',
-              }}
-            >
-              <SkipForward className="w-5 h-5" />
-            </button>
-          </div>
+                <button
+                  type="button"
+                  onClick={onNext}
+                  aria-label="Siguiente"
+                  className={`min-w-[48px] min-h-[48px] ${navCtrl.className}`}
+                  style={navCtrl.style}
+                >
+                  <SkipForward className="w-5 h-5" />
+                </button>
+              </div>
 
-          <button
-            type="button"
-            onClick={onCycleRepeat}
-            aria-label="Repetir"
-            className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center transition"
-            style={{
-              backgroundColor: repeat !== 'off' ? 'var(--accent-soft)' : 'transparent',
-            }}
-          >
-            {repeat === 'one' ? <Repeat1 className="w-4 h-4" /> : <Repeat className="w-4 h-4" />}
-          </button>
-        </div>
+              <button
+                type="button"
+                onClick={onCycleRepeat}
+                aria-label="Repetir"
+                className={`min-w-[42px] min-h-[42px] ${repeatCtrl.className}`}
+                style={repeatCtrl.style}
+              >
+                {repeat === 'one' ? <Repeat1 className="w-4 h-4" /> : <Repeat className="w-4 h-4" />}
+              </button>
+            </div>
+          );
+        })()}
 
         {/* Volume Slider */}
         <div className="flex items-center gap-3 px-1">

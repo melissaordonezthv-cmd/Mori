@@ -8,8 +8,9 @@ import {
   SkipForward,
   X,
 } from 'lucide-react';
-import type { AudioTrack } from '../types/music';
+import type { AudioTrack, ThemeConfig } from '../types/music';
 import { formatDuration } from '../utils/audioMetadata';
+import { getPlaybackControlPresentation } from '../utils/playbackButtons3D';
 
 interface FloatingOverlayWidgetProps {
   open: boolean;
@@ -18,6 +19,7 @@ interface FloatingOverlayWidgetProps {
   currentTime: number;
   duration: number;
   activeLyric: string;
+  theme?: ThemeConfig;
   onTogglePlay: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -32,6 +34,7 @@ export const FloatingOverlayWidget: React.FC<FloatingOverlayWidgetProps> = ({
   currentTime,
   duration,
   activeLyric,
+  theme,
   onTogglePlay,
   onPrev,
   onNext,
@@ -46,6 +49,8 @@ export const FloatingOverlayWidget: React.FC<FloatingOverlayWidgetProps> = ({
   if (!open || !track) return null;
 
   const pct = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const navCtrl = getPlaybackControlPresentation('nav', theme);
+  const playCtrl = getPlaybackControlPresentation('play', theme);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -154,16 +159,13 @@ export const FloatingOverlayWidget: React.FC<FloatingOverlayWidgetProps> = ({
           <span className="text-[10px] font-mono-nums" style={{ color: 'var(--text-muted)' }}>
             {formatDuration(currentTime)} / {formatDuration(duration)}
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={onPrev}
               aria-label="Anterior"
-              className="w-8 h-8 rounded-xl flex items-center justify-center border"
-              style={{
-                backgroundColor: 'var(--bg-surface)',
-                borderColor: 'var(--divider-color)',
-              }}
+              className={`w-8 h-8 ${navCtrl.className}`}
+              style={navCtrl.style}
             >
               <SkipBack className="w-3.5 h-3.5" />
             </button>
@@ -171,11 +173,8 @@ export const FloatingOverlayWidget: React.FC<FloatingOverlayWidgetProps> = ({
               type="button"
               onClick={onTogglePlay}
               aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{
-                backgroundColor: 'var(--accent-color)',
-                color: '#1C1B1F',
-              }}
+              className={`w-9 h-9 ${playCtrl.className}`}
+              style={playCtrl.style}
             >
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
             </button>
@@ -183,11 +182,8 @@ export const FloatingOverlayWidget: React.FC<FloatingOverlayWidgetProps> = ({
               type="button"
               onClick={onNext}
               aria-label="Siguiente"
-              className="w-8 h-8 rounded-xl flex items-center justify-center border"
-              style={{
-                backgroundColor: 'var(--bg-surface)',
-                borderColor: 'var(--divider-color)',
-              }}
+              className={`w-8 h-8 ${navCtrl.className}`}
+              style={navCtrl.style}
             >
               <SkipForward className="w-3.5 h-3.5" />
             </button>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Share2, X } from 'lucide-react';
+import { Check, Maximize2, Minimize2, Share2, X } from 'lucide-react';
 import { BottomPlayerBar } from './components/BottomPlayerBar';
 import { CuteAvatarFrame } from './components/CuteAvatarFrame';
 import { EmojiLockScreen } from './components/EmojiLockScreen';
@@ -7,6 +7,7 @@ import { EmojiLockSetupModal } from './components/EmojiLockSetupModal';
 import { FloatingOverlayWidget } from './components/FloatingOverlayWidget';
 import { type ActivePanelModal, HamburgerMenu } from './components/HamburgerMenu';
 import { LibraryView } from './components/LibraryView';
+import { MusicPermissionModal } from './components/MusicPermissionModal';
 import { NowPlayingPanel } from './components/NowPlayingPanel';
 import { PlaylistModal } from './components/PlaylistModal';
 import { ProfileModal } from './components/ProfileModal';
@@ -42,6 +43,7 @@ import type {
 import { playButtonSound } from './utils/asmrSounds';
 import { copyTextSafely, getShareableAppUrl } from './utils/shareLink';
 import {
+  collectAudioFilesFromDirectory,
   extractTrackFromFile,
   isSupportedAudioFile,
   prepareAudioSnippetForAI,
@@ -51,7 +53,10 @@ import {
   deleteTrackFromDB,
   getAllPlaylists,
   getAllTracks,
+  getMusicDirHandle,
   getTrackBlob,
+  type PersistableDirectoryHandle,
+  saveMusicDirHandle,
   savePlaylist,
   saveTrack,
 } from './utils/db';
@@ -63,6 +68,7 @@ const STORAGE_SETTINGS_KEY = 'morinote_settings_v1';
 const STORAGE_LOCK_KEY = 'morinote_lock_v1';
 const STORAGE_SOUND_KEY = 'morinote_sounds_v1';
 const STORAGE_INITIALIZED_KEY = 'morinote_seeded_v1';
+const STORAGE_PERMISSION_DISMISSED_KEY = 'morinote_music_perm_dismissed_v1';
 
 const DEFAULT_LOCK_CONFIG: LockConfig = {
   enabled: false,
@@ -84,6 +90,25 @@ const DEFAULT_THEME: ThemeConfig = {
   dividerColorId: 'rosa',
   textColorId: 'negro',
   songBarColorId: 'auto',
+  songBarAnimationId: 'shimmer_glow',
+  trackCardStyleId: 'classic_row',
+  trackCardDecorId: 'auto',
+  trackCardColorId: 'auto',
+  trackCardCustomBg: '',
+  trackCardCustomText: '',
+  buttonThemeId: 'soft_pill',
+  buttonCustomBg: '',
+  buttonCustomText: '',
+  playbackBtnStyleId: 'cushion_3d',
+  playbackBtnColorId: 'auto',
+  playbackPlayBg: '',
+  playbackNavBg: '',
+  playbackPlayIcon: '',
+  playbackNavIcon: '',
+  playbackRimColor: '',
+  bannerImageUrl: '',
+  bannerText: '',
+  compactThemeLists: true,
   moodSyncEnabled: true,
 };
 
@@ -94,6 +119,7 @@ const DEFAULT_PROFILE: ProfileConfig = {
   avatarUrl: DEFAULT_AVATAR_URL,
   bannerUrl: DEFAULT_BANNER_URL,
   avatarFrame: 'sakura',
+  nameShape: 'cloud',
   activeCharms: ['cassette', 'ribbon', 'matcha', 'cloud'],
   favoriteGenre: 'Indie Pastel · Lo-Fi',
   cityTag: 'Nube Suave',
@@ -109,6 +135,16 @@ const DEFAULT_SETTINGS: AppSettings = {
   playbackSpeed: 1,
   backgroundPlaybackEnabled: true,
   autoDetectLyrics: true,
+  layoutOrientation: 'auto',
+  nowPlayingVisual: 'cover_classic',
+  nowPlayingColorMode: 'theme',
+  nowPlayingPrimaryColor: '#F4B8CC',
+  nowPlayingSecondaryColor: '#FFF5F8',
+  nowPlayingAccentColor: '#E5C185',
+  nowPlayingDetailColor: '#2E2A36',
+  nowPlayingHideCover: false,
+  settingsTextColorId: 'auto',
+  settingsTextCustomHex: '',
 };
 
 function readStored<T>(key: string, fallback: T): T {
@@ -155,6 +191,80 @@ export default function App() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [isLocked, setIsLocked] = useState<boolean>(initialHasLock);
   const [showIntro, setShowIntro] = useState<boolean>(!initialHasLock);
+  const [dbReady, setDbReady] = useState(false);
+  const [musicPermissionOpen, setMusicPermissionOpen] = useState(false);
+  const [savedFolderName, setSavedFolderName] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(() =>
+    typeof document !== 'undefined' ? Boolean(document.fullscreenElement) : false
+  );
+  const [fullscreenError, setFullscreenError] = useState<string | null>(null);
+  const savedDirHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  const permissionFolderInputRef = useRef<HTMLInputElement | null>(null);
+  const permCheckedRef = useRef(false);
+  const tracksRef = useRef<AudioTrack[]>([]);
+  tracksRef.current = tracks;
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    height: typeof window !== 'undefined' ? window.innerHeight : 800,
+    isLandscape:
+      typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : true,
+  }));
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setViewport({
+        width: window.innerWidth,
+        height: window.innerHeight,
+        isLandscape: window.innerWidth > window.innerHeight,
+      });
+    };
+    window.addEventListener('resize', updateViewport);
+    window.addEventListener('orientationchange', updateViewport);
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      setFullscreenError(null);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      window.removeEventListener('resize', updateViewport);
+      window.removeEventListener('orientationchange', updateViewport);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    setFullscreenError(null);
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        setFullscreenError(
+          'Tu navegador no permite pantalla completa directa desde aquí; abre el enlace en una pestaña o instálala.'
+        );
+      }
+    } catch {
+      setFullscreenError(
+        'Para pantalla completa, abre la app fuera de la vista previa o añade la app a tu pantalla de inicio.'
+      );
+    }
+  }, []);
+
+  const orientationPref = settings.layoutOrientation ?? 'auto';
+  const isSplitLayout =
+    orientationPref === 'landscape'
+      ? true
+      : orientationPref === 'portrait'
+        ? false
+        : (viewport.isLandscape && viewport.width >= 600) || viewport.width >= 1024;
+  const isCompactSplit = isSplitLayout && viewport.height < 840;
+
+  useEffect(() => {
+    if (isSplitLayout && mobilePlayerOpen) {
+      setMobilePlayerOpen(false);
+    }
+  }, [isSplitLayout, mobilePlayerOpen]);
 
   const t = UI_TEXT[settings.language] ?? UI_TEXT.es;
 
@@ -292,6 +402,8 @@ export default function App() {
         }
       } catch (err) {
         console.error('Error initializing local audio DB:', err);
+      } finally {
+        if (active) setDbReady(true);
       }
     }
     initLibrary();
@@ -397,68 +509,171 @@ export default function App() {
 
   const autoAnalyzedIdsRef = useRef<Set<string>>(new Set());
 
-  const handleImportFiles = async (fileList: FileList | File[]) => {
-    const supported = Array.from(fileList).filter(isSupportedAudioFile);
-    if (supported.length === 0) return;
+  const handleImportFiles = useCallback(
+    async (fileList: FileList | File[], silentIfAlreadyPresent = false) => {
+      const supported = Array.from(fileList).filter(isSupportedAudioFile);
+      if (supported.length === 0) return;
 
-    // Deduplicate against already imported tracks (same file size + matching cleaned filename)
-    const existingKeys = new Set(
-      tracks.map((tr) => `${tr.fileSize}:${tr.title.trim().toLowerCase()}`)
-    );
-    const files = supported.filter((file) => {
-      const cleanName = file.name
-        .replace(/\.[^/.]+$/, '')
-        .replace(/[_]+/g, ' ')
-        .trim()
-        .toLowerCase();
-      return !existingKeys.has(`${file.size}:${cleanName}`);
-    });
-
-    if (files.length === 0) {
-      setImportSummary('Esas canciones ya estaban en tu biblioteca.');
-      window.setTimeout(() => setImportSummary(null), 3500);
-      return;
-    }
-
-    setIsImporting(true);
-    setImportSummary(null);
-    setImportProgress({ done: 0, total: files.length });
-
-    try {
-      const importedTracks: AudioTrack[] = [];
-      const CHUNK_SIZE = 4;
-
-      for (let start = 0; start < files.length; start += CHUNK_SIZE) {
-        const slice = files.slice(start, start + CHUNK_SIZE);
-        const extracted = await Promise.all(
-          slice.map((file, offset) => extractTrackFromFile(file, start + offset))
-        );
-        for (const item of extracted) {
-          await saveTrack(item.track, item.blob);
-          importedTracks.push(item.track);
-        }
-        setImportProgress({
-          done: Math.min(files.length, start + slice.length),
-          total: files.length,
-        });
-      }
-
-      setTracks((prev) => [...importedTracks, ...prev]);
-      if (!audio.currentTrackId && importedTracks.length > 0) {
-        audio.loadAndPlayTrack(importedTracks[0].id, importedTracks.map((tr) => tr.id));
-      }
-      setImportSummary(
-        importedTracks.length === 1
-          ? 'Se agregó 1 canción a tu biblioteca.'
-          : `Se agregaron ${importedTracks.length} canciones a tu biblioteca.`
+      // Deduplicate against already imported tracks (same file size + matching cleaned filename)
+      const existingKeys = new Set(
+        tracksRef.current.map((tr) => `${tr.fileSize}:${tr.title.trim().toLowerCase()}`)
       );
-      window.setTimeout(() => setImportSummary(null), 4000);
-    } catch (err) {
-      console.error('Error importing audio files:', err);
-    } finally {
-      setIsImporting(false);
-      setImportProgress(null);
+      const files = supported.filter((file) => {
+        const cleanName = file.name
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[_]+/g, ' ')
+          .trim()
+          .toLowerCase();
+        return !existingKeys.has(`${file.size}:${cleanName}`);
+      });
+
+      if (files.length === 0) {
+        if (!silentIfAlreadyPresent) {
+          setImportSummary('Esas canciones ya estaban en tu biblioteca.');
+          window.setTimeout(() => setImportSummary(null), 3500);
+        }
+        return;
+      }
+
+      setIsImporting(true);
+      setImportSummary(null);
+      setImportProgress({ done: 0, total: files.length });
+
+      try {
+        const importedTracks: AudioTrack[] = [];
+        const CHUNK_SIZE = 4;
+
+        for (let start = 0; start < files.length; start += CHUNK_SIZE) {
+          const slice = files.slice(start, start + CHUNK_SIZE);
+          const extracted = await Promise.all(
+            slice.map((file, offset) => extractTrackFromFile(file, start + offset))
+          );
+          for (const item of extracted) {
+            await saveTrack(item.track, item.blob);
+            importedTracks.push(item.track);
+          }
+          setImportProgress({
+            done: Math.min(files.length, start + slice.length),
+            total: files.length,
+          });
+        }
+
+        setTracks((prev) => [...importedTracks, ...prev]);
+        if (!audio.currentTrackId && importedTracks.length > 0) {
+          audio.loadAndPlayTrack(
+            importedTracks[0].id,
+            importedTracks.map((tr) => tr.id)
+          );
+        }
+        setImportSummary(
+          importedTracks.length === 1
+            ? 'Se agregó 1 canción a tu biblioteca.'
+            : `Se agregaron ${importedTracks.length} canciones a tu biblioteca.`
+        );
+        window.setTimeout(() => setImportSummary(null), 4000);
+      } catch (err) {
+        console.error('Error importing audio files:', err);
+      } finally {
+        setIsImporting(false);
+        setImportProgress(null);
+      }
+    },
+    [audio]
+  );
+
+  const syncFromDirectoryHandle = useCallback(
+    async (dirHandle: FileSystemDirectoryHandle, silentIfAlreadyPresent = false) => {
+      try {
+        const files = await collectAudioFilesFromDirectory(dirHandle);
+        if (files.length > 0) {
+          await handleImportFiles(files, silentIfAlreadyPresent);
+        }
+      } catch (err) {
+        console.error('Error scanning music folder:', err);
+      }
+    },
+    [handleImportFiles]
+  );
+
+  // Prompt or auto-sync saved music directory on entry (once unlocked and intro finishes)
+  useEffect(() => {
+    if (!dbReady || isLocked || showIntro || permCheckedRef.current) return;
+    permCheckedRef.current = true;
+
+    let active = true;
+    async function checkSavedMusicFolder() {
+      const handle = await getMusicDirHandle();
+      if (!active) return;
+
+      if (handle) {
+        savedDirHandleRef.current = handle;
+        setSavedFolderName(handle.name);
+        try {
+          const perm = await (handle as PersistableDirectoryHandle).queryPermission?.({
+            mode: 'read',
+          });
+          if (!active) return;
+          if (perm === 'granted') {
+            await syncFromDirectoryHandle(handle, true);
+            return;
+          }
+        } catch {
+          // Fall through to prompt modal
+        }
+        if (!localStorage.getItem(STORAGE_PERMISSION_DISMISSED_KEY)) {
+          setMusicPermissionOpen(true);
+        }
+      } else if (!localStorage.getItem(STORAGE_PERMISSION_DISMISSED_KEY)) {
+        setSavedFolderName(null);
+        setMusicPermissionOpen(true);
+      }
     }
+
+    checkSavedMusicFolder();
+    return () => {
+      active = false;
+    };
+  }, [dbReady, isLocked, showIntro, syncFromDirectoryHandle]);
+
+  const handleSaveDirectoryHandle = useCallback((handle: FileSystemDirectoryHandle) => {
+    savedDirHandleRef.current = handle;
+    setSavedFolderName(handle.name);
+    saveMusicDirHandle(handle).catch(() => {});
+  }, []);
+
+  const handleConnectMusicFolder = async () => {
+    const saved = savedDirHandleRef.current as PersistableDirectoryHandle | null;
+    if (saved && typeof saved.requestPermission === 'function') {
+      try {
+        const res = await saved.requestPermission({ mode: 'read' });
+        if (res === 'granted') {
+          setMusicPermissionOpen(false);
+          await syncFromDirectoryHandle(saved, false);
+          return;
+        }
+      } catch {
+        // Fall through to fresh folder picker
+      }
+    }
+
+    const picker = (
+      window as unknown as { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }
+    ).showDirectoryPicker;
+    if (typeof picker === 'function') {
+      try {
+        const dirHandle = await picker();
+        handleSaveDirectoryHandle(dirHandle);
+        setMusicPermissionOpen(false);
+        await syncFromDirectoryHandle(dirHandle, false);
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+      }
+    }
+
+    permissionFolderInputRef.current?.click();
   };
 
   const handleLoadSampleTracks = async () => {
@@ -693,6 +908,22 @@ export default function App() {
     }
   };
 
+  const handleResetAppearance = useCallback(() => {
+    setTheme({ ...DEFAULT_THEME });
+    setSettings((prev) => ({
+      ...prev,
+      nowPlayingVisual: DEFAULT_SETTINGS.nowPlayingVisual,
+      nowPlayingColorMode: DEFAULT_SETTINGS.nowPlayingColorMode,
+      nowPlayingPrimaryColor: DEFAULT_SETTINGS.nowPlayingPrimaryColor,
+      nowPlayingSecondaryColor: DEFAULT_SETTINGS.nowPlayingSecondaryColor,
+      nowPlayingAccentColor: DEFAULT_SETTINGS.nowPlayingAccentColor,
+      nowPlayingDetailColor: DEFAULT_SETTINGS.nowPlayingDetailColor,
+      nowPlayingHideCover: DEFAULT_SETTINGS.nowPlayingHideCover,
+      settingsTextColorId: DEFAULT_SETTINGS.settingsTextColorId,
+      settingsTextCustomHex: DEFAULT_SETTINGS.settingsTextCustomHex,
+    }));
+  }, []);
+
   const stats = useMemo(
     () => ({
       tracks: tracks.length,
@@ -705,14 +936,20 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen pb-24 transition-colors duration-300"
-      style={{
-        backgroundColor: 'var(--bg-app)',
-        color: 'var(--text-main)',
-        backgroundImage: theme.moodSyncEnabled
-          ? 'radial-gradient(circle at 12% 8%, var(--mood-aura-1), transparent 45%), radial-gradient(circle at 88% 12%, var(--mood-aura-2), transparent 42%)'
-          : undefined,
-      }}
+      data-btn-theme={theme.buttonThemeId ?? 'soft_pill'}
+      data-btn-custom={theme.buttonCustomBg ? 'true' : undefined}
+      className="h-dvh overflow-hidden flex flex-col transition-colors duration-300"
+      style={
+        {
+          backgroundColor: 'var(--bg-app)',
+          color: 'var(--text-main)',
+          backgroundImage: theme.moodSyncEnabled
+            ? 'radial-gradient(circle at 12% 8%, var(--mood-aura-1), transparent 45%), radial-gradient(circle at 88% 12%, var(--mood-aura-2), transparent 42%)'
+            : undefined,
+          '--btn-custom-bg': theme.buttonCustomBg || undefined,
+          '--btn-custom-text': theme.buttonCustomText || '#1C1B1F',
+        } as React.CSSProperties
+      }
     >
       <EmojiLockScreen
         open={isLocked}
@@ -743,13 +980,17 @@ export default function App() {
       />
       {/* Top Bar: 3-line corner hamburger menu + Brand wordmark + Profile/Share */}
       <header
-        className="sticky top-0 z-30 border-b backdrop-blur-md"
+        className="shrink-0 z-30 border-b backdrop-blur-md"
         style={{
           backgroundColor: 'var(--bg-app)',
           borderColor: 'var(--divider-color)',
         }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+        <div
+          className={`max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-4 ${
+            isCompactSplit ? 'h-14' : 'h-16'
+          }`}
+        >
           {/* Corner Three-Line Menu + Brand */}
           <div className="flex items-center gap-3 min-w-0">
             <HamburgerMenu t={t} onSelect={(panel) => setActiveModal(panel)} />
@@ -760,8 +1001,26 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Quick Actions: Share Link + Cute Profile Avatar */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Right Quick Actions: Fullscreen + Share Link + Cute Profile Avatar */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+              aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+              className="min-w-[42px] min-h-[42px] px-2.5 rounded-2xl border flex items-center justify-center transition"
+              style={{
+                backgroundColor: isFullscreen ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                borderColor: 'var(--divider-color)',
+              }}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </button>
+
             <button
               type="button"
               onClick={handleShareLink}
@@ -801,106 +1060,136 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Responsive Workspace: Library + Now Playing */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 sm:pt-7 grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-6 items-start">
-        <LibraryView
-          tracks={tracks}
-          playlists={playlists}
-          currentTrackId={audio.currentTrackId}
-          isPlaying={audio.isPlaying}
-          isImporting={isImporting}
-          importProgress={importProgress}
-          importSummary={importSummary}
-          t={t}
-          onImportFiles={handleImportFiles}
-          onLoadSampleTracks={handleLoadSampleTracks}
-          onPlayTrack={(trackId, q) => audio.loadAndPlayTrack(trackId, q)}
-          onTogglePlay={audio.togglePlay}
-          onToggleFavorite={handleToggleFavorite}
-          onEditTrack={(tr) => setEditingTrack(tr)}
-          onDeleteTrack={handleDeleteTrack}
-          onCreatePlaylist={() => {
-            setEditingPlaylist(null);
-            setPlaylistModalOpen(true);
-          }}
-          onEditPlaylist={(pl) => {
-            setEditingPlaylist(pl);
-            setPlaylistModalOpen(true);
-          }}
-          onDeletePlaylist={handleDeletePlaylist}
-          onAddTrackToPlaylist={handleAddTrackToPlaylist}
-          onAddTracksToPlaylist={handleAddTracksToPlaylist}
-          onRemoveTrackFromPlaylist={handleRemoveTrackFromPlaylist}
-        />
-
-        {/* Desktop Anchored Now Playing Panel */}
-        <aside className="hidden lg:block sticky top-22">
-          <NowPlayingPanel
-            track={audio.currentTrack}
+      {/* Main Responsive Workspace: Natural 2-pane split in tablet/horizontal mode or single column in portrait */}
+      <main
+        className={
+          isSplitLayout
+            ? `flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-6 ${
+                isCompactSplit ? 'pt-3' : 'pt-4'
+              } grid grid-cols-[minmax(0,1.06fr)_minmax(0,0.94fr)] gap-3 sm:gap-5 overflow-hidden items-stretch`
+            : 'flex-1 min-h-0 w-full max-w-3xl mx-auto px-3 sm:px-6 pt-3 pb-[76px] flex flex-col overflow-hidden'
+        }
+      >
+        <div
+          className={
+            isSplitLayout
+              ? 'h-full min-h-0 flex flex-col pr-2 sm:pr-3 pb-3 min-w-0 border-r overflow-hidden'
+              : 'flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden'
+          }
+          style={isSplitLayout ? { borderColor: 'var(--divider-color)' } : undefined}
+        >
+          <LibraryView
             tracks={tracks}
-            queueIds={audio.queueIds}
+            playlists={playlists}
+            currentTrackId={audio.currentTrackId}
             isPlaying={audio.isPlaying}
-            currentTime={audio.currentTime}
-            duration={audio.duration}
-            volume={audio.volume}
-            isMuted={audio.isMuted}
-            shuffle={audio.shuffle}
-            repeat={audio.repeat}
-            moodSyncEnabled={theme.moodSyncEnabled}
-            isFloatingOpen={floating.isFloatingOpen}
-            isWidgetOpen={floating.isWidgetOpen}
-            isAnalyzingLyrics={isAnalyzingLyrics}
-            aiError={aiError}
-            settings={settings}
-            analyserRef={audio.analyserRef}
-            accentColor={playerSwatch.accent}
+            isImporting={isImporting}
+            importProgress={importProgress}
+            importSummary={importSummary}
+            bannerImageUrl={theme.bannerImageUrl}
+            bannerText={theme.bannerText}
+            trackCardStyleId={theme.trackCardStyleId ?? 'classic_row'}
+            trackCardDecorId={theme.trackCardDecorId ?? 'auto'}
+            trackCardColorId={theme.trackCardColorId ?? 'auto'}
+            trackCardCustomBg={theme.trackCardCustomBg}
+            trackCardCustomText={theme.trackCardCustomText}
             t={t}
+            onImportFiles={handleImportFiles}
+            onSaveDirHandle={handleSaveDirectoryHandle}
+            onLoadSampleTracks={handleLoadSampleTracks}
+            onPlayTrack={(trackId, q) => audio.loadAndPlayTrack(trackId, q)}
             onTogglePlay={audio.togglePlay}
-            onNext={() => audio.playNext(false)}
-            onPrev={audio.playPrev}
-            onSeek={audio.seekTo}
-            onVolumeChange={audio.setVolume}
-            onToggleMute={() => audio.setIsMuted((m) => !m)}
-            onToggleShuffle={() => audio.setShuffle((s) => !s)}
-            onCycleRepeat={() =>
-              audio.setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'))
-            }
             onToggleFavorite={handleToggleFavorite}
             onEditTrack={(tr) => setEditingTrack(tr)}
-            onQuickUpdateCover={handleQuickUpdateCover}
-            onDetectLyrics={handleDetectLyricsAI}
-            onRetranslateLyrics={handleRetranslateLyrics}
-            onChangeTargetLanguage={(lang) =>
-              setSettings((prev) => ({ ...prev, language: lang }))
-            }
-            onPlayTrack={(id) => audio.loadAndPlayTrack(id)}
-            onRemoveFromQueue={audio.removeFromQueue}
-            onChangeEqPreset={(preset: EqPresetId) =>
-              setSettings((prev) => ({
-                ...prev,
-                eqPreset: preset,
-                eqBands: [...EQ_PRESETS[preset].bands] as [
-                  number,
-                  number,
-                  number,
-                  number,
-                  number,
-                ],
-              }))
-            }
-            onChangeAudioSettings={(partial) =>
-              setSettings((prev) => ({ ...prev, ...partial }))
-            }
-            onToggleFloating={floating.openFloating}
-            onToggleWidget={() => floating.setIsWidgetOpen((v) => !v)}
+            onDeleteTrack={handleDeleteTrack}
+            onCreatePlaylist={() => {
+              setEditingPlaylist(null);
+              setPlaylistModalOpen(true);
+            }}
+            onEditPlaylist={(pl) => {
+              setEditingPlaylist(pl);
+              setPlaylistModalOpen(true);
+            }}
+            onDeletePlaylist={handleDeletePlaylist}
+            onAddTrackToPlaylist={handleAddTrackToPlaylist}
+            onAddTracksToPlaylist={handleAddTracksToPlaylist}
+            onRemoveTrackFromPlaylist={handleRemoveTrackFromPlaylist}
           />
-        </aside>
+        </div>
+
+        {/* Tablet Horizontal / Desktop Side-by-Side Now Playing Panel */}
+        {isSplitLayout && (
+          <aside className="h-full min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y pl-0.5 pb-6 min-w-0">
+            <NowPlayingPanel
+              track={audio.currentTrack}
+              tracks={tracks}
+              queueIds={audio.queueIds}
+              isPlaying={audio.isPlaying}
+              currentTime={audio.currentTime}
+              duration={audio.duration}
+              volume={audio.volume}
+              isMuted={audio.isMuted}
+              shuffle={audio.shuffle}
+              repeat={audio.repeat}
+              moodSyncEnabled={theme.moodSyncEnabled}
+              songBarAnimation={theme.songBarAnimationId ?? 'shimmer_glow'}
+              theme={theme}
+              isFloatingOpen={floating.isFloatingOpen}
+              isWidgetOpen={floating.isWidgetOpen}
+              isAnalyzingLyrics={isAnalyzingLyrics}
+              aiError={aiError}
+              settings={settings}
+              analyserRef={audio.analyserRef}
+              accentColor={playerSwatch.accent}
+              compactSplit={isCompactSplit}
+              t={t}
+              onTogglePlay={audio.togglePlay}
+              onNext={() => audio.playNext(false)}
+              onPrev={audio.playPrev}
+              onSeek={audio.seekTo}
+              onVolumeChange={audio.setVolume}
+              onToggleMute={() => audio.setIsMuted((m) => !m)}
+              onToggleShuffle={() => audio.setShuffle((s) => !s)}
+              onCycleRepeat={() =>
+                audio.setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'))
+              }
+              onToggleFavorite={handleToggleFavorite}
+              onEditTrack={(tr) => setEditingTrack(tr)}
+              onQuickUpdateCover={handleQuickUpdateCover}
+              onDetectLyrics={handleDetectLyricsAI}
+              onRetranslateLyrics={handleRetranslateLyrics}
+              onChangeTargetLanguage={(lang) =>
+                setSettings((prev) => ({ ...prev, language: lang }))
+              }
+              onPlayTrack={(id) => audio.loadAndPlayTrack(id)}
+              onRemoveFromQueue={audio.removeFromQueue}
+              onChangeEqPreset={(preset: EqPresetId) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  eqPreset: preset,
+                  eqBands: [...EQ_PRESETS[preset].bands] as [
+                    number,
+                    number,
+                    number,
+                    number,
+                    number,
+                  ],
+                }))
+              }
+              onChangeAudioSettings={(partial) =>
+                setSettings((prev) => ({ ...prev, ...partial }))
+              }
+              onToggleFloating={floating.openFloating}
+              onToggleWidget={() => floating.setIsWidgetOpen((v) => !v)}
+            />
+          </aside>
+        )}
       </main>
 
-      {/* Mobile Full Now Playing Sheet */}
-      {mobilePlayerOpen && (
+      {/* Portrait / Single-Column Expandable Now Playing Sheet */}
+      {!isSplitLayout && mobilePlayerOpen && (
         <div
-          className="fixed inset-0 z-50 lg:hidden overflow-y-auto p-4"
+          className="fixed inset-0 z-50 overflow-y-auto p-4"
           style={{ backgroundColor: 'var(--bg-app)' }}
         >
           <div className="flex items-center justify-between mb-3">
@@ -930,6 +1219,8 @@ export default function App() {
             shuffle={audio.shuffle}
             repeat={audio.repeat}
             moodSyncEnabled={theme.moodSyncEnabled}
+            songBarAnimation={theme.songBarAnimationId ?? 'shimmer_glow'}
+            theme={theme}
             isFloatingOpen={floating.isFloatingOpen}
             isWidgetOpen={floating.isWidgetOpen}
             isAnalyzingLyrics={isAnalyzingLyrics}
@@ -980,19 +1271,23 @@ export default function App() {
         </div>
       )}
 
-      {/* Persistent Compact Bottom Mini Player */}
-      <BottomPlayerBar
-        track={audio.currentTrack}
-        isPlaying={audio.isPlaying}
-        currentTime={audio.currentTime}
-        duration={audio.duration}
-        isFloatingOpen={floating.isFloatingOpen}
-        onTogglePlay={audio.togglePlay}
-        onNext={() => audio.playNext(false)}
-        onPrev={audio.playPrev}
-        onOpenMobilePlayer={() => setMobilePlayerOpen(true)}
-        onToggleFloating={floating.openFloating}
-      />
+      {/* Persistent Compact Bottom Mini Player (portrait / single-column mode) */}
+      {!isSplitLayout && (
+        <BottomPlayerBar
+          track={audio.currentTrack}
+          isPlaying={audio.isPlaying}
+          currentTime={audio.currentTime}
+          duration={audio.duration}
+          songBarAnimation={theme.songBarAnimationId ?? 'shimmer_glow'}
+          theme={theme}
+          isFloatingOpen={floating.isFloatingOpen}
+          onTogglePlay={audio.togglePlay}
+          onNext={() => audio.playNext(false)}
+          onPrev={audio.playPrev}
+          onOpenMobilePlayer={() => setMobilePlayerOpen(true)}
+          onToggleFloating={floating.openFloating}
+        />
+      )}
 
       {/* Corner Menu Modals: Perfil, Tema, Ajustes */}
       <ProfileModal
@@ -1013,6 +1308,7 @@ export default function App() {
           setActiveModal(null);
           setShowIntro(true);
         }}
+        onOpenMusicCardSettings={() => setActiveModal('settings')}
         onClose={() => setActiveModal(null)}
       />
 
@@ -1024,6 +1320,7 @@ export default function App() {
         currentTime={audio.currentTime}
         duration={audio.duration}
         activeLyric={activeLyricText}
+        theme={theme}
         onTogglePlay={audio.togglePlay}
         onPrev={audio.playPrev}
         onNext={() => audio.playNext(false)}
@@ -1039,6 +1336,9 @@ export default function App() {
         isFloatingOpen={floating.isFloatingOpen}
         isWidgetOpen={floating.isWidgetOpen}
         floatingError={floating.floatingError}
+        isSplitActive={isSplitLayout}
+        isFullscreen={isFullscreen}
+        fullscreenError={fullscreenError}
         t={t}
         onChangeSettings={setSettings}
         onSetSleepTimer={(mins, onEnd) => {
@@ -1047,9 +1347,43 @@ export default function App() {
         }}
         onToggleFloating={floating.openFloating}
         onToggleWidget={() => floating.setIsWidgetOpen((v) => !v)}
+        onToggleFullscreen={toggleFullscreen}
+        onOpenMusicPermission={() => setMusicPermissionOpen(true)}
+        onOpenTheme={() => setActiveModal('theme')}
+        onResetAppearance={handleResetAppearance}
         onShareLink={handleShareLink}
         linkCopied={linkCopied}
         onClose={() => setActiveModal(null)}
+      />
+
+      <MusicPermissionModal
+        open={musicPermissionOpen && !isLocked && !showIntro}
+        savedFolderName={savedFolderName}
+        isImporting={isImporting}
+        onConnectFolder={handleConnectMusicFolder}
+        onSelectFallbackFiles={(files) => handleImportFiles(files)}
+        onDismiss={(rememberDontAsk) => {
+          if (rememberDontAsk) {
+            localStorage.setItem(STORAGE_PERMISSION_DISMISSED_KEY, '1');
+          }
+          setMusicPermissionOpen(false);
+        }}
+      />
+
+      <input
+        ref={permissionFolderInputRef}
+        type="file"
+        multiple
+        // @ts-expect-error webkitdirectory is standard in Chromium/Safari for local folder access
+        webkitdirectory=""
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) {
+            handleImportFiles(e.target.files);
+            setMusicPermissionOpen(false);
+          }
+          e.target.value = '';
+        }}
       />
 
       <EmojiLockSetupModal
@@ -1074,7 +1408,7 @@ export default function App() {
 
       {/* Track & Playlist Edit Modals */}
       <TrackEditModal
-        key={editingTrack?.id ?? 'closed'}
+        key={editingTrack ? `track-${editingTrack.id}` : 'track-edit-closed'}
         track={editingTrack}
         t={t}
         onSave={handleSaveEditedTrack}
@@ -1082,7 +1416,13 @@ export default function App() {
       />
 
       <PlaylistModal
-        key={editingPlaylist?.id ?? (playlistModalOpen ? 'new' : 'closed')}
+        key={
+          editingPlaylist
+            ? `playlist-${editingPlaylist.id}`
+            : playlistModalOpen
+              ? 'playlist-new'
+              : 'playlist-closed'
+        }
         open={playlistModalOpen}
         playlist={editingPlaylist}
         tracks={tracks}

@@ -7,14 +7,18 @@ import {
   SkipBack,
   SkipForward,
 } from 'lucide-react';
-import type { AudioTrack } from '../types/music';
+import type { AudioTrack, SongBarAnimationId, ThemeConfig } from '../types/music';
 import { formatDuration } from '../utils/audioMetadata';
+import { getPlaybackControlPresentation } from '../utils/playbackButtons3D';
+import { SongProgressBar } from './SongProgressBar';
 
 interface BottomPlayerBarProps {
   track: AudioTrack | null;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  songBarAnimation?: SongBarAnimationId;
+  theme?: ThemeConfig;
   isFloatingOpen: boolean;
   onTogglePlay: () => void;
   onNext: () => void;
@@ -28,6 +32,8 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
   isPlaying,
   currentTime,
   duration,
+  songBarAnimation = 'shimmer_glow',
+  theme,
   isFloatingOpen,
   onTogglePlay,
   onNext,
@@ -36,8 +42,8 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
   onToggleFloating,
 }) => {
   if (!track) return null;
-
-  const pct = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const navCtrl = getPlaybackControlPresentation('nav', theme);
+  const playCtrl = getPlaybackControlPresentation('play', theme);
 
   return (
     <div
@@ -47,16 +53,14 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
         borderColor: 'var(--divider-color)',
       }}
     >
-      {/* Slim song progress bar */}
-      <div className="h-1 w-full bg-black/10">
-        <div
-          className="h-full transition-all duration-200"
-          style={{
-            width: `${pct}%`,
-            backgroundColor: 'var(--song-bar-color)',
-          }}
-        />
-      </div>
+      {/* Slim animated song progress bar */}
+      <SongProgressBar
+        currentTime={currentTime}
+        duration={duration}
+        animation={songBarAnimation}
+        isPlaying={isPlaying}
+        compact
+      />
 
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
         <button
@@ -79,12 +83,13 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
           </div>
         </button>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={onPrev}
             aria-label="Anterior"
-            className="hidden sm:flex min-w-[40px] min-h-[40px] rounded-xl items-center justify-center"
+            className={`hidden sm:flex min-w-[38px] min-h-[38px] ${navCtrl.className}`}
+            style={navCtrl.style}
           >
             <SkipBack className="w-4 h-4" />
           </button>
@@ -93,11 +98,8 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
             type="button"
             onClick={onTogglePlay}
             aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
-            className="w-11 h-11 rounded-2xl flex items-center justify-center transition-transform active:scale-95"
-            style={{
-              backgroundColor: 'var(--accent-color)',
-              color: '#1C1B1F',
-            }}
+            className={`w-11 h-11 ${playCtrl.className}`}
+            style={playCtrl.style}
           >
             {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
           </button>
@@ -106,7 +108,8 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
             type="button"
             onClick={onNext}
             aria-label="Siguiente"
-            className="min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center"
+            className={`min-w-[38px] min-h-[38px] ${navCtrl.className}`}
+            style={navCtrl.style}
           >
             <SkipForward className="w-4 h-4" />
           </button>
@@ -129,7 +132,7 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
             type="button"
             onClick={onOpenMobilePlayer}
             aria-label="Expandir reproductor"
-            className="lg:hidden min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center"
+            className="min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center"
           >
             <ChevronUp className="w-5 h-5" />
           </button>

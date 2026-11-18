@@ -75,7 +75,444 @@
 
 @media (prefers-reduced-motion: reduce) {
   .vinyl-spin,
-  .vinyl-spin-paused {
-    animation: none;
+  .vinyl-spin-paused,
+  .bar-anim-shimmer,
+  .bar-anim-rainbow,
+  .bar-anim-stripes,
+  .bar-anim-wave,
+  .bar-anim-wave-svg,
+  .bar-anim-wave-svg-reverse,
+  .bar-anim-bubbles,
+  .bar-anim-jelly,
+  .bar-anim-pistachio,
+  .bar-anim-bounce-line,
+  .bar-anim-eq-bar,
+  .bar-anim-orb-float,
+  .bar-thumb-pulse,
+  .bar-thumb-bounce,
+  .bar-thumb-comet,
+  .bar-thumb-glide {
+    animation: none !important;
   }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes bar-shimmer-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+@keyframes bar-stripes-move {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 28px 0;
+  }
+}
+
+@keyframes bar-rainbow-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes bar-wave-scroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes bar-wave-scroll-reverse {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+@keyframes bar-jelly-kf {
+  0%, 100% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scaleY(1.25);
+    filter: brightness(1.1);
+  }
+}
+
+@keyframes bar-bounce-line-kf {
+  0%, 100% {
+    transform: translateY(0px) scaleY(1);
+  }
+  25% {
+    transform: translateY(-4px) scaleY(1.12);
+  }
+  50% {
+    transform: translateY(3px) scaleY(0.95);
+  }
+  75% {
+    transform: translateY(-2px) scaleY(1.08);
+  }
+}
+
+@keyframes bar-eq-pop-kf {
+  0%, 100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1.28);
+  }
+}
+
+@keyframes bar-orb-float-kf {
+  0%, 100% {
+    transform: translate(-50%, -62%) scale(1);
+    box-shadow: 0 0 8px 2px var(--song-bar-color);
+  }
+  50% {
+    transform: translate(-50%, -32%) scale(1.2);
+    box-shadow: 0 0 15px 5px var(--song-bar-color);
+  }
+}
+
+@keyframes bar-thumb-pulse-kf {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.24);
+  }
+}
+
+@keyframes bar-thumb-bounce-kf {
+  0%, 100% {
+    transform: translate(-50%, -52%) rotate(-6deg);
+  }
+  50% {
+    transform: translate(-50%, -74%) rotate(6deg);
+  }
+}
+
+@keyframes bar-thumb-glide-kf {
+  0%, 100% {
+    transform: translate(-50%, -58%) rotate(-8deg) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -44%) rotate(8deg) scale(1.12);
+  }
+}
+
+@keyframes bar-comet-glow-kf {
+  0%, 100% {
+    box-shadow: 0 0 6px 2px var(--song-bar-color);
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    box-shadow: 0 0 14px 5px var(--song-bar-color);
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+}
+
+@keyframes bar-bubbles-drift {
+  0% {
+    background-position: 0px 8px, 16px 4px;
+  }
+  100% {
+    background-position: 36px -8px, 52px -4px;
+  }
+}
+
+.bar-anim-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.72) 50%,
+    transparent 100%
+  );
+  animation: bar-shimmer-slide 1.9s ease-in-out infinite;
+}
+
+.bar-anim-rainbow {
+  background: linear-gradient(
+    90deg,
+    #f9a8d4,
+    #fde68a,
+    #a7f3d0,
+    #93c5fd,
+    #d8b4fe,
+    #f9a8d4
+  );
+  background-size: 220% 100%;
+  animation: bar-rainbow-shift 4s linear infinite;
+}
+
+.bar-anim-pistachio {
+  background: linear-gradient(
+    90deg,
+    #b8dda1,
+    #dff2cf,
+    #9dd9b7,
+    #e2f5d6,
+    #b8dda1
+  );
+  background-size: 220% 100%;
+  animation: bar-rainbow-shift 3.2s ease-in-out infinite;
+}
+
+.bar-anim-stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.42) 0px,
+    rgba(255, 255, 255, 0.42) 7px,
+    transparent 7px,
+    transparent 14px
+  );
+  background-size: 28px 28px;
+  animation: bar-stripes-move 1.1s linear infinite;
+}
+
+.bar-anim-wave {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.65) 25%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.65) 75%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: bar-rainbow-shift 2.4s ease-in-out infinite;
+}
+
+.bar-anim-wave-svg {
+  animation: bar-wave-scroll 2.2s linear infinite;
+}
+
+.bar-anim-wave-svg-reverse {
+  animation: bar-wave-scroll-reverse 3s linear infinite;
+}
+
+.bar-anim-jelly {
+  animation: bar-jelly-kf 1.3s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.bar-anim-bounce-line {
+  animation: bar-bounce-line-kf 1.45s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.bar-anim-eq-bar {
+  animation: bar-eq-pop-kf 0.85s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.bar-anim-orb-float {
+  animation: bar-orb-float-kf 1.5s ease-in-out infinite;
+}
+
+.bar-anim-bubbles {
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.8) 1.5px, transparent 2px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.6) 1px, transparent 1.5px);
+  background-size: 18px 12px, 24px 12px;
+  animation: bar-bubbles-drift 1.8s linear infinite;
+}
+
+.bar-thumb-pulse {
+  animation: bar-thumb-pulse-kf 1.3s ease-in-out infinite;
+}
+
+.bar-thumb-bounce {
+  animation: bar-thumb-bounce-kf 0.9s ease-in-out infinite;
+}
+
+.bar-thumb-glide {
+  animation: bar-thumb-glide-kf 1.6s ease-in-out infinite;
+}
+
+.bar-thumb-comet {
+  animation: bar-comet-glow-kf 1.4s ease-in-out infinite;
+}
+
+/* =========================================================
+   22 Adorable Emoji-Free Button Themes ([data-btn-theme])
+   ========================================================= */
+[data-btn-theme] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  transition: transform 0.14s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+[data-btn-theme] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]):active {
+  transform: translateY(1.5px) scale(0.97);
+}
+
+/* Optional editable custom button color override */
+[data-btn-custom="true"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]):not(.btn-keep-bg) {
+  background-color: var(--btn-custom-bg) !important;
+  color: var(--btn-custom-text) !important;
+}
+
+[data-btn-theme="soft_pill"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 9999px !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+[data-btn-theme="cloud_puff_3d"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 18px !important;
+  box-shadow: 0 3px 0 var(--accent-color), inset 0 2px 3px rgba(255, 255, 255, 0.72) !important;
+}
+
+[data-btn-theme="candy_gloss"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 16px !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.09), inset 0 2px 4px rgba(255, 255, 255, 0.85) !important;
+}
+
+[data-btn-theme="keycap_3d"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 13px !important;
+  box-shadow: 0 4px 0 var(--divider-color), inset 0 -2px 0 rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-btn-theme="velvet_black"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 14px !important;
+  background-color: #18181d !important;
+  color: #ffffff !important;
+  border-color: #3d3d48 !important;
+  box-shadow: 0 3px 0 #09090c !important;
+}
+
+[data-btn-theme="porcelain_white"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 16px !important;
+  background-color: #ffffff !important;
+  color: #1c1b1f !important;
+  border-color: #e4e4ec !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-btn-theme="lace_stitch"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 18px !important;
+  border-style: dotted !important;
+  border-width: 2px !important;
+  border-color: var(--accent-color) !important;
+}
+
+[data-btn-theme="pastel_bevel"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 15px !important;
+  border-width: 2px !important;
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 3px 0 var(--accent-color) !important;
+}
+
+[data-btn-theme="acrylic_glass"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 16px !important;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+[data-btn-theme="mochi_squish"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 9999px !important;
+  background-color: #fff5f8 !important;
+  color: #5a2a3f !important;
+  border-color: #f4b8cc !important;
+  box-shadow: 0 3px 0 #f4b8cc !important;
+}
+
+[data-btn-theme="pistachio_macaron"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 9999px !important;
+  background-color: #eaf6e2 !important;
+  color: #264422 !important;
+  border-color: #9ece84 !important;
+  box-shadow: 0 3px 0 #9ece84 !important;
+}
+
+[data-btn-theme="cocoa_wafer"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 14px !important;
+  background-color: #5a3d2f !important;
+  color: #fff4ea !important;
+  border-color: #9b745d !important;
+  box-shadow: 0 3px 0 #382319 !important;
+}
+
+[data-btn-theme="pearl_rim"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 20px !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 4px 10px rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-btn-theme="petal_skew"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 20px 8px 20px 8px !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-btn-theme="double_border"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 14px !important;
+  border-style: double !important;
+  border-width: 3px !important;
+}
+
+[data-btn-theme="ribbon_tab"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 12px !important;
+  box-shadow: -3px 0 0 var(--accent-color), 0 2px 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-btn-theme="neon_soft"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 16px !important;
+  box-shadow: 0 0 10px var(--accent-soft), inset 0 0 0 1px var(--accent-color) !important;
+}
+
+[data-btn-theme="champagne_gold"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 15px !important;
+  background-color: #fcf5e5 !important;
+  color: #533b14 !important;
+  border-color: #d4a857 !important;
+  box-shadow: 0 3px 0 #d4a857 !important;
+}
+
+[data-btn-theme="sakura_frost"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 18px !important;
+  background-color: #ffeaf2 !important;
+  color: #682c45 !important;
+  border-color: #f3a9c3 !important;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.9), 0 2px 6px rgba(243, 169, 195, 0.35) !important;
+}
+
+[data-btn-theme="mint_gel"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 18px !important;
+  background-color: #e4f8ee !important;
+  color: #194934 !important;
+  border-color: #7ecba3 !important;
+  box-shadow: 0 3px 0 #7ecba3 !important;
+}
+
+[data-btn-theme="minimal_ink"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 10px !important;
+  border-width: 1.5px !important;
+  border-color: var(--text-main) !important;
+  box-shadow: none !important;
+}
+
+[data-btn-theme="marshmallow_elevated"] :is(header, main, nav, [role="dialog"]) button:not(.btn-raw):not([role="switch"]) {
+  border-radius: 20px !important;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.08), 0 2px 0 var(--divider-color), inset 0 2px 0 rgba(255, 255, 255, 0.75) !important;
 }

@@ -1,24 +1,60 @@
 import React, { useState } from 'react';
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   Copy,
+  Disc3,
   Download,
+  FolderHeart,
   Globe,
   Headphones,
   Layers,
+  Maximize2,
+  Minimize2,
   PictureInPicture2,
+  RotateCcw,
+  RotateCw,
   Share2,
   Sliders,
+  Smartphone,
   Sparkles,
+  Tablet,
   Timer,
+  Type,
   Volume2,
   X,
 } from 'lucide-react';
 import { LANGUAGE_OPTIONS, type Translations } from '../constants/i18n';
-import { AUDIO_MODE_PROFILES, EQ_PRESETS } from '../constants/themes';
+import {
+  AUDIO_MODE_PROFILES,
+  DEFAULT_COVER_SAKURA,
+  EQ_PRESETS,
+  NOW_PLAYING_COLOR_PRESETS,
+  NOW_PLAYING_VISUAL_OPTIONS,
+  TEXT_SWATCHES,
+} from '../constants/themes';
 import { usePWAInstall } from '../hooks/usePWAInstall';
-import type { AppLanguage, AppSettings, AudioEngineMode, EqPresetId } from '../types/music';
+import type {
+  AppLanguage,
+  AppSettings,
+  AudioEngineMode,
+  EqPresetId,
+  LayoutOrientation,
+  SettingsTextColorId,
+} from '../types/music';
 import { getShareableAppUrl } from '../utils/shareLink';
+import { NowPlayingVisualStage } from './NowPlayingVisualStage';
+
+function hexToMutedRgba(hex: string): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return 'rgba(128, 128, 128, 0.72)';
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return 'rgba(128, 128, 128, 0.72)';
+  return `rgba(${r}, ${g}, ${b}, 0.72)`;
+}
 
 interface SettingsModalProps {
   open: boolean;
@@ -28,11 +64,18 @@ interface SettingsModalProps {
   isFloatingOpen: boolean;
   isWidgetOpen: boolean;
   floatingError: string | null;
+  isSplitActive: boolean;
+  isFullscreen?: boolean;
+  fullscreenError?: string | null;
   t: Translations;
   onChangeSettings: (next: AppSettings) => void;
   onSetSleepTimer: (minutes: number | null, onTrackEnd?: boolean) => void;
   onToggleFloating: () => void;
   onToggleWidget: () => void;
+  onToggleFullscreen?: () => void;
+  onOpenMusicPermission?: () => void;
+  onOpenTheme?: () => void;
+  onResetAppearance?: () => void;
   onShareLink: () => void;
   linkCopied: boolean;
   onClose: () => void;
@@ -40,6 +83,32 @@ interface SettingsModalProps {
 
 const BAND_LABELS = ['60 Hz', '230 Hz', '910 Hz', '3.6 kHz', '14 kHz'];
 const SPEED_OPTIONS = [0.75, 1, 1.15, 1.25, 1.5];
+
+const ORIENTATION_OPTIONS: Array<{
+  id: LayoutOrientation;
+  label: string;
+  description: string;
+  icon: 'auto' | 'landscape' | 'portrait';
+}> = [
+  {
+    id: 'auto',
+    label: 'Automático (al girar)',
+    description: 'Se divide en 2 paneles al girar la tablet en horizontal',
+    icon: 'auto',
+  },
+  {
+    id: 'landscape',
+    label: 'Horizontal (en 2)',
+    description: 'Biblioteca a la izquierda y reproductor a la derecha',
+    icon: 'landscape',
+  },
+  {
+    id: 'portrait',
+    label: 'Vertical (1 columna)',
+    description: 'Una columna con barra inferior expandible',
+    icon: 'portrait',
+  },
+];
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   open,
@@ -49,11 +118,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   isFloatingOpen,
   isWidgetOpen,
   floatingError,
+  isSplitActive,
+  isFullscreen = false,
+  fullscreenError = null,
   t,
   onChangeSettings,
   onSetSleepTimer,
   onToggleFloating,
   onToggleWidget,
+  onToggleFullscreen,
+  onOpenMusicPermission,
+  onOpenTheme,
+  onResetAppearance,
   onShareLink,
   linkCopied,
   onClose,
@@ -61,10 +137,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showHomeScreenGuide, setShowHomeScreenGuide] = useState(false);
+  const [showAllTextColors, setShowAllTextColors] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [resetDoneMsg, setResetDoneMsg] = useState(false);
 
   if (!open) return null;
 
   const appUrl = getShareableAppUrl();
+
+  const activeSettingsTextId: SettingsTextColorId = settings.settingsTextColorId ?? 'auto';
+  const matchedTextSwatch = TEXT_SWATCHES.find((sw) => sw.id === activeSettingsTextId);
+  const customSettingsHex = settings.settingsTextCustomHex || '#1C1B1F';
+  const settingsTextOverrideStyle: React.CSSProperties =
+    activeSettingsTextId === 'auto'
+      ? {}
+      : activeSettingsTextId === 'custom'
+        ? ({
+            '--text-main': customSettingsHex,
+            '--text-muted': hexToMutedRgba(customSettingsHex),
+            color: customSettingsHex,
+          } as React.CSSProperties)
+        : matchedTextSwatch
+          ? ({
+              '--text-main': matchedTextSwatch.hex,
+              '--text-muted': matchedTextSwatch.mutedHex,
+              color: matchedTextSwatch.hex,
+            } as React.CSSProperties)
+          : {};
 
   const applyPreset = (presetId: EqPresetId) => {
     onChangeSettings({
@@ -83,6 +182,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     });
   };
 
+  const allTextOptions: Array<{ id: SettingsTextColorId; label: string; hex: string }> = [
+    { id: 'auto', label: 'Del tema', hex: 'auto' },
+    ...TEXT_SWATCHES.map((sw) => ({ id: sw.id as SettingsTextColorId, label: sw.label, hex: sw.hex })),
+    { id: 'custom', label: 'Tu color', hex: 'custom' },
+  ];
+  const visibleTextOptions = (() => {
+    if (showAllTextColors || allTextOptions.length <= 6) return allTextOptions;
+    const head = allTextOptions.slice(0, 6);
+    if (!head.some((opt) => opt.id === activeSettingsTextId)) {
+      const selectedOpt = allTextOptions.find((opt) => opt.id === activeSettingsTextId);
+      if (selectedOpt) return [selectedOpt, ...allTextOptions.slice(0, 5)];
+    }
+    return head;
+  })();
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
@@ -97,6 +211,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           backgroundColor: 'var(--bg-elevated)',
           borderColor: 'var(--divider-color)',
           color: 'var(--text-main)',
+          ...settingsTextOverrideStyle,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -151,6 +266,645 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 );
               })}
+            </div>
+          </section>
+
+          {/* Settings-only Letter Color Palette & Reset Colors Button */}
+          <section
+            className="p-4 rounded-2xl border space-y-4"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--divider-color)',
+            }}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Type className="w-5 h-5 mt-0.5 shrink-0" />
+                <div>
+                  <h3 className="text-sm font-semibold">Color de letras en Ajustes</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    Paleta exclusiva solo para este panel de Ajustes sin cambiar las letras del resto de la app
+                  </p>
+                </div>
+              </div>
+              {onResetAppearance && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetDoneMsg(false);
+                    setConfirmResetOpen(true);
+                  }}
+                  className="btn-raw min-h-[38px] px-3.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition active:scale-95"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    borderColor: 'var(--divider-color)',
+                    color: 'var(--text-main)',
+                  }}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restablecer colores</span>
+                </button>
+              )}
+            </div>
+
+            {resetDoneMsg && (
+              <div
+                className="px-3.5 py-2.5 rounded-xl border text-xs font-medium flex items-center justify-between gap-2"
+                style={{
+                  backgroundColor: 'var(--accent-soft)',
+                  borderColor: 'var(--divider-color)',
+                }}
+              >
+                <span>Listo: los colores y personalizaciones volvieron a su estado original.</span>
+                <button
+                  type="button"
+                  onClick={() => setResetDoneMsg(false)}
+                  aria-label="Ocultar aviso"
+                  className="btn-raw p-1 rounded-lg opacity-75 hover:opacity-100"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {visibleTextOptions.map((opt) => {
+                const selected = activeSettingsTextId === opt.id;
+                const isLightHex = (hexStr: string) => {
+                  const clean = hexStr.replace('#', '');
+                  if (clean.length !== 6) return false;
+                  const r = parseInt(clean.slice(0, 2), 16);
+                  const g = parseInt(clean.slice(2, 4), 16);
+                  const b = parseInt(clean.slice(4, 6), 16);
+                  return (r * 299 + g * 587 + b * 114) / 1000 > 165;
+                };
+                const isLightSwatch =
+                  opt.id === 'blanco' ||
+                  opt.id === 'crema' ||
+                  opt.id === 'amarillo' ||
+                  (opt.id === 'custom' &&
+                    Boolean(settings.settingsTextCustomHex) &&
+                    isLightHex(customSettingsHex));
+                const dotBg =
+                  opt.id === 'auto'
+                    ? 'var(--bg-elevated)'
+                    : opt.id === 'custom'
+                      ? customSettingsHex
+                      : opt.hex;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() =>
+                      onChangeSettings({
+                        ...settings,
+                        settingsTextColorId: opt.id,
+                        settingsTextCustomHex:
+                          opt.id === 'custom' ? settings.settingsTextCustomHex || '#1C1B1F' : settings.settingsTextCustomHex,
+                      })
+                    }
+                    className="btn-raw min-h-[40px] px-2.5 py-1.5 rounded-xl border flex items-center gap-2 text-xs font-semibold transition"
+                    style={{
+                      backgroundColor: selected ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                      borderColor: selected ? 'var(--text-main)' : 'var(--divider-color)',
+                      color: 'var(--text-main)',
+                    }}
+                  >
+                    <span
+                      className="w-5 h-5 rounded-full border shrink-0 flex items-center justify-center text-[10px] font-bold"
+                      style={{
+                        background:
+                          opt.id === 'custom' && !settings.settingsTextCustomHex
+                            ? 'linear-gradient(135deg,#F4A6C1,#7CC3F7,#9BD27E)'
+                            : dotBg,
+                        borderColor: 'rgba(128,128,128,0.35)',
+                        color:
+                          opt.id === 'auto'
+                            ? 'var(--text-main)'
+                            : isLightSwatch
+                              ? '#1C1B1F'
+                              : '#FFFFFF',
+                      }}
+                    >
+                      A
+                    </span>
+                    <span className="truncate">{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {allTextOptions.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setShowAllTextColors((v) => !v)}
+                className="btn-raw w-full min-h-[36px] px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  borderColor: 'var(--divider-color)',
+                  color: 'var(--text-main)',
+                }}
+              >
+                <span>
+                  {showAllTextColors
+                    ? 'Mostrar solo una parte'
+                    : `Ver todos los ${allTextOptions.length} colores de letra`}
+                </span>
+                {showAllTextColors ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
+            {activeSettingsTextId === 'custom' && (
+              <div
+                className="pt-2.5 border-t flex flex-wrap items-center justify-between gap-3 text-xs"
+                style={{ borderColor: 'var(--divider-color)' }}
+              >
+                <label className="flex items-center gap-2 font-semibold">
+                  <span>Elegir color exacto para las letras de Ajustes:</span>
+                  <input
+                    type="color"
+                    value={customSettingsHex}
+                    onChange={(e) =>
+                      onChangeSettings({
+                        ...settings,
+                        settingsTextColorId: 'custom',
+                        settingsTextCustomHex: e.target.value,
+                      })
+                    }
+                    className="w-8 h-8 rounded-lg border cursor-pointer"
+                  />
+                </label>
+                <span className="font-mono-nums text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  {customSettingsHex.toUpperCase()}
+                </span>
+              </div>
+            )}
+          </section>
+
+          {/* Tablet / Horizontal Dual-Pane Layout */}
+          <section
+            className="p-4 rounded-2xl border space-y-3"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--divider-color)',
+            }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Tablet className="w-5 h-5 mt-0.5 shrink-0" />
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    Pantalla dividida / Horizontal (Tablet)
+                  </h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    Adapta la app en dos mitades naturales al girar tu tablet o forzar vista horizontal
+                  </p>
+                </div>
+              </div>
+              <span
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-xl border shrink-0"
+                style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  borderColor: 'var(--divider-color)',
+                }}
+              >
+                {isSplitActive ? '2 paneles' : '1 columna'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {ORIENTATION_OPTIONS.map((opt) => {
+                const current = settings.layoutOrientation ?? 'auto';
+                const active = current === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      onChangeSettings({ ...settings, layoutOrientation: opt.id });
+                      const orientationApi = (
+                        window.screen?.orientation as unknown as {
+                          lock?: (mode: string) => Promise<void>;
+                          unlock?: () => void;
+                        }
+                      );
+                      if (opt.id === 'landscape') {
+                        orientationApi?.lock?.('landscape').catch(() => {});
+                      } else if (opt.id === 'portrait') {
+                        orientationApi?.lock?.('portrait').catch(() => {});
+                      } else {
+                        orientationApi?.unlock?.();
+                      }
+                    }}
+                    className="p-3 rounded-2xl border text-left transition flex flex-col gap-1"
+                    style={{
+                      backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                      borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-bold">
+                      {opt.icon === 'auto' && <RotateCw className="w-3.5 h-3.5 shrink-0" />}
+                      {opt.icon === 'landscape' && <Tablet className="w-3.5 h-3.5 shrink-0 rotate-90" />}
+                      {opt.icon === 'portrait' && <Smartphone className="w-3.5 h-3.5 shrink-0" />}
+                      <span>{opt.label}</span>
+                    </div>
+                    <p
+                      className="text-[11px] leading-snug"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      {opt.description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Fullscreen & Automatic Music Folder Sync Row */}
+            <div
+              className="pt-3 border-t grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+              style={{ borderColor: 'var(--divider-color)' }}
+            >
+              {onToggleFullscreen && (
+                <button
+                  type="button"
+                  onClick={onToggleFullscreen}
+                  className="min-h-[46px] px-3.5 py-2.5 rounded-2xl border text-left flex items-center justify-between gap-2 transition active:scale-[0.99]"
+                  style={{
+                    backgroundColor: isFullscreen ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                    borderColor: isFullscreen ? 'var(--text-main)' : 'var(--divider-color)',
+                  }}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {isFullscreen ? (
+                      <Minimize2 className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <Maximize2 className="w-4 h-4 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold truncate">Pantalla completa</p>
+                      <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>
+                        {isFullscreen ? 'Activa · Toca para salir' : 'Amplía sin barras del navegador'}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              {onOpenMusicPermission && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenMusicPermission();
+                  }}
+                  className="min-h-[46px] px-3.5 py-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition active:scale-[0.99]"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  <FolderHeart className="w-4 h-4 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold truncate">Acceso automático a música</p>
+                    <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>
+                      Conectar o sincronizar carpeta
+                    </p>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {fullscreenError && (
+              <p className="text-[11px] leading-snug" style={{ color: 'var(--text-muted)' }}>
+                {fullscreenError}
+              </p>
+            )}
+          </section>
+
+          {/* Now Playing Music Card 3D Visual Style & 4-Part Editable Colors */}
+          <section
+            className="p-4 rounded-2xl border space-y-4"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--divider-color)',
+            }}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <Disc3 className="w-5 h-5 mt-0.5 shrink-0" />
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    Portada y escenario 3D al reproducir ({NOW_PLAYING_VISUAL_OPTIONS.length} diseños)
+                  </h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    Vinilos 3D, fundas abiertas, relicarios, esferas de cristal, estuches y más; colorea cada parte a tu gusto
+                  </p>
+                </div>
+              </div>
+              {onOpenTheme && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenTheme();
+                  }}
+                  className="btn-raw min-h-[34px] px-3 py-1 rounded-xl border text-[11px] font-semibold shrink-0"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  Botones 3D en Tema →
+                </button>
+              )}
+            </div>
+
+            {/* Live 3D Stage Preview */}
+            <div
+              className="p-5 rounded-2xl border flex flex-col items-center justify-center"
+              style={{
+                backgroundColor: 'var(--bg-elevated)',
+                borderColor: 'var(--divider-color)',
+              }}
+            >
+              <NowPlayingVisualStage
+                visualId={settings.nowPlayingVisual ?? 'cover_classic'}
+                colorMode={settings.nowPlayingColorMode ?? 'theme'}
+                primaryColor={settings.nowPlayingPrimaryColor || '#F4B8CC'}
+                secondaryColor={settings.nowPlayingSecondaryColor || '#FFF5F8'}
+                stageAccentColor={settings.nowPlayingAccentColor || '#E5C185'}
+                stageDetailColor={settings.nowPlayingDetailColor || '#2E2A36'}
+                hideCover={settings.nowPlayingHideCover ?? false}
+                coverUrl={DEFAULT_COVER_SAKURA}
+                trackTitle="Melodía en Hi-Res"
+                trackArtist="MoriNote"
+                isPlaying
+                moodSyncEnabled={false}
+                activeAuraColor="var(--accent-color)"
+                compactSplit
+                onChangeCoverClick={() => {}}
+                changeCoverLabel="Vista previa"
+              />
+            </div>
+
+            {/* 23 Realistic 3D Visual Style Options Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {NOW_PLAYING_VISUAL_OPTIONS.map((vis) => {
+                const active = (settings.nowPlayingVisual ?? 'cover_classic') === vis.id;
+                return (
+                  <button
+                    key={vis.id}
+                    type="button"
+                    onClick={() => onChangeSettings({ ...settings, nowPlayingVisual: vis.id })}
+                    className="btn-raw p-2.5 rounded-2xl border text-left transition flex flex-col gap-0.5"
+                    style={{
+                      backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                      borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                    }}
+                  >
+                    <span className="text-xs font-bold truncate">{vis.label}</span>
+                    <span
+                      className="text-[10px] leading-snug line-clamp-2"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      {vis.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 4-Part Editable Color Mode & Color Pickers */}
+            <div
+              className="pt-3 border-t space-y-3"
+              style={{ borderColor: 'var(--divider-color)' }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-semibold">Colorea cualquier parte del diseño 3D:</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChangeSettings({ ...settings, nowPlayingColorMode: 'theme' })
+                    }
+                    className="min-h-[34px] px-3 py-1 rounded-xl border text-xs font-semibold transition"
+                    style={{
+                      backgroundColor:
+                        (settings.nowPlayingColorMode ?? 'theme') === 'theme'
+                          ? 'var(--accent-color)'
+                          : 'var(--bg-elevated)',
+                      borderColor: 'var(--divider-color)',
+                      color:
+                        (settings.nowPlayingColorMode ?? 'theme') === 'theme'
+                          ? '#1C1B1F'
+                          : 'var(--text-main)',
+                    }}
+                  >
+                    Color de tu tema
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChangeSettings({
+                        ...settings,
+                        nowPlayingColorMode: 'custom',
+                        nowPlayingPrimaryColor: settings.nowPlayingPrimaryColor || '#F4B8CC',
+                        nowPlayingSecondaryColor: settings.nowPlayingSecondaryColor || '#FFF5F8',
+                        nowPlayingAccentColor: settings.nowPlayingAccentColor || '#E5C185',
+                        nowPlayingDetailColor: settings.nowPlayingDetailColor || '#2E2A36',
+                      })
+                    }
+                    className="min-h-[34px] px-3 py-1 rounded-xl border text-xs font-semibold transition"
+                    style={{
+                      backgroundColor:
+                        settings.nowPlayingColorMode === 'custom'
+                          ? 'var(--accent-color)'
+                          : 'var(--bg-elevated)',
+                      borderColor: 'var(--divider-color)',
+                      color:
+                        settings.nowPlayingColorMode === 'custom' ? '#1C1B1F' : 'var(--text-main)',
+                    }}
+                  >
+                    Editar cada parte
+                  </button>
+                </div>
+              </div>
+
+              {settings.nowPlayingColorMode === 'custom' && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {NOW_PLAYING_COLOR_PRESETS.map((preset) => {
+                      const active =
+                        settings.nowPlayingPrimaryColor === preset.primary &&
+                        settings.nowPlayingSecondaryColor === preset.secondary &&
+                        settings.nowPlayingAccentColor === preset.accent &&
+                        settings.nowPlayingDetailColor === preset.detail;
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() =>
+                            onChangeSettings({
+                              ...settings,
+                              nowPlayingColorMode: 'custom',
+                              nowPlayingPrimaryColor: preset.primary,
+                              nowPlayingSecondaryColor: preset.secondary,
+                              nowPlayingAccentColor: preset.accent,
+                              nowPlayingDetailColor: preset.detail,
+                            })
+                          }
+                          className="btn-raw min-h-[34px] px-2.5 py-1 rounded-xl border text-[11px] font-medium flex items-center gap-1.5"
+                          style={{
+                            backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                            borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                          }}
+                        >
+                          <span className="flex -space-x-1 shrink-0">
+                            {[preset.primary, preset.secondary, preset.accent, preset.detail].map(
+                              (col, i) => (
+                                <span
+                                  key={i}
+                                  className="w-3 h-3 rounded-full border"
+                                  style={{
+                                    backgroundColor: col,
+                                    borderColor: 'rgba(128,128,128,0.4)',
+                                  }}
+                                />
+                              )
+                            )}
+                          </span>
+                          <span>{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 4 Part Independent Color Pickers */}
+                  <div className="grid grid-cols-2 gap-2.5 text-xs pt-1">
+                    <label
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl border font-medium"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      <span>Disco / Carcasa</span>
+                      <input
+                        type="color"
+                        value={settings.nowPlayingPrimaryColor || '#F4B8CC'}
+                        onChange={(e) =>
+                          onChangeSettings({
+                            ...settings,
+                            nowPlayingColorMode: 'custom',
+                            nowPlayingPrimaryColor: e.target.value,
+                          })
+                        }
+                        className="w-8 h-8 rounded-lg border cursor-pointer shrink-0"
+                      />
+                    </label>
+                    <label
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl border font-medium"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      <span>Sello / Etiqueta / Interior</span>
+                      <input
+                        type="color"
+                        value={settings.nowPlayingSecondaryColor || '#FFF5F8'}
+                        onChange={(e) =>
+                          onChangeSettings({
+                            ...settings,
+                            nowPlayingColorMode: 'custom',
+                            nowPlayingSecondaryColor: e.target.value,
+                          })
+                        }
+                        className="w-8 h-8 rounded-lg border cursor-pointer shrink-0"
+                      />
+                    </label>
+                    <label
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl border font-medium"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      <span>Metales / Brazo / Aros</span>
+                      <input
+                        type="color"
+                        value={settings.nowPlayingAccentColor || '#E5C185'}
+                        onChange={(e) =>
+                          onChangeSettings({
+                            ...settings,
+                            nowPlayingColorMode: 'custom',
+                            nowPlayingAccentColor: e.target.value,
+                          })
+                        }
+                        className="w-8 h-8 rounded-lg border cursor-pointer shrink-0"
+                      />
+                    </label>
+                    <label
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl border font-medium"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      <span>Relieve / Base / Sombra 3D</span>
+                      <input
+                        type="color"
+                        value={settings.nowPlayingDetailColor || '#2E2A36'}
+                        onChange={(e) =>
+                          onChangeSettings({
+                            ...settings,
+                            nowPlayingColorMode: 'custom',
+                            nowPlayingDetailColor: e.target.value,
+                          })
+                        }
+                        className="w-8 h-8 rounded-lg border cursor-pointer shrink-0"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Hide photo in disc center toggle */}
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <div>
+                  <p className="text-xs font-semibold">Centro de puro color (sin foto de portada)</p>
+                  <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    Ideal para ver únicamente el vinilo o el diseño 3D adaptado a tus colores
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(settings.nowPlayingHideCover)}
+                  onClick={() =>
+                    onChangeSettings({
+                      ...settings,
+                      nowPlayingHideCover: !settings.nowPlayingHideCover,
+                    })
+                  }
+                  className="w-13 h-7 rounded-full p-1 transition-colors shrink-0 flex items-center"
+                  style={{
+                    backgroundColor: settings.nowPlayingHideCover
+                      ? 'var(--accent-color)'
+                      : 'rgba(128,128,128,0.28)',
+                  }}
+                >
+                  <span
+                    className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      settings.nowPlayingHideCover ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </section>
 
@@ -648,6 +1402,79 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Confirmation Prompt Before Resetting All Colors & Customizations */}
+      {confirmResetOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="reset-colors-title"
+          onClick={() => setConfirmResetOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl p-5 shadow-2xl border space-y-4"
+            style={{
+              backgroundColor: 'var(--bg-elevated)',
+              borderColor: 'var(--divider-color)',
+              color: 'var(--text-main)',
+              ...settingsTextOverrideStyle,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="w-10 h-10 rounded-2xl border flex items-center justify-center shrink-0"
+                style={{
+                  backgroundColor: 'var(--accent-soft)',
+                  borderColor: 'var(--divider-color)',
+                }}
+              >
+                <RotateCcw className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <h4 id="reset-colors-title" className="text-base font-bold">
+                  ¿Restablecer colores y personalización?
+                </h4>
+                <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                  Se borrarán los colores, tema de botones, estilos de tarjetas, animaciones, banner y colores 3D que personalizaste para volver a como estaba antes. Tus canciones, listas y perfil no se borrarán.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmResetOpen(false)}
+                className="btn-raw min-h-[40px] px-4 py-2 rounded-xl border text-xs font-semibold transition"
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  borderColor: 'var(--divider-color)',
+                  color: 'var(--text-main)',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onResetAppearance?.();
+                  setConfirmResetOpen(false);
+                  setResetDoneMsg(true);
+                }}
+                className="btn-raw min-h-[40px] px-4 py-2 rounded-xl border text-xs font-bold transition"
+                style={{
+                  backgroundColor: 'var(--accent-color)',
+                  borderColor: 'var(--divider-color)',
+                  color: '#1C1B1F',
+                }}
+              >
+                Sí, restablecer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
