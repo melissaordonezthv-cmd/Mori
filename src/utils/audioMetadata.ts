@@ -28,8 +28,35 @@ const SUPPORTED_AUDIO_EXTENSIONS = new Set([
   'mp4',
 ]);
 
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallback);
+      }
+    }, ms);
+    promise
+      .then((value) => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(value);
+        }
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(fallback);
+        }
+      });
+  });
+}
+
 export function isSupportedAudioFile(file: File): boolean {
-  if (file.type.startsWith('audio/')) return true;
+  if (file.type.startsWith('audio/') || file.type === 'application/ogg') return true;
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
   return SUPPORTED_AUDIO_EXTENSIONS.has(ext);
 }
@@ -43,15 +70,31 @@ export async function collectAudioFilesFromDirectory(
     const iterable = handle as unknown as {
       values: () => AsyncIterable<FileSystemHandle>;
     };
+    const subDirs: FileSystemDirectoryHandle[] = [];
+    const filePromises: Array<Promise<void>> = [];
+
     for await (const entry of iterable.values()) {
       if (entry.kind === 'file') {
-        const file = await (entry as FileSystemFileHandle).getFile();
-        if (isSupportedAudioFile(file)) {
-          collected.push(file);
-        }
+        filePromises.push(
+          (entry as FileSystemFileHandle)
+            .getFile()
+            .then((file) => {
+              if (isSupportedAudioFile(file)) {
+                collected.push(file);
+              }
+            })
+            .catch(() => {})
+        );
       } else if (entry.kind === 'directory') {
-        await walk(entry as FileSystemDirectoryHandle);
+        subDirs.push(entry as FileSystemDirectoryHandle);
       }
+    }
+
+    if (filePromises.length > 0) {
+      await Promise.all(filePromises);
+    }
+    for (const dir of subDirs) {
+      await walk(dir);
     }
   }
 
@@ -75,6 +118,58 @@ function uint8ToDataUrl(bytes: Uint8Array, mimeType: string): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
+}
+
+async function compressCoverBytesToDataUrl(
+  bytes: Uint8Array,
+  mimeType: string,
+  maxSize = 260
+): Promise<string | null> {
+  if (!bytes || bytes.length === 0) return null;
+
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  const blob = new Blob([copy], { type: mimeType || 'image/jpeg' });
+  const objectUrl = URL.createObjectURL(blob);
+
+  try {
+    const dataUrl = await withTimeout(
+      new Promise<string | null>((resolve) => {
+        const image = new Image();
+        image.onload = () => {
+          try {
+            const scale = Math.min(1, maxSize / Math.max(image.width || maxSize, image.height || maxSize));
+            const w = Math.max(1, Math.round((image.width || maxSize) * scale));
+            const h = Math.max(1, Math.round((image.height || maxSize) * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              resolve(null);
+              return;
+            }
+            ctx.drawImage(image, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.82));
+          } catch {
+            resolve(null);
+          }
+        };
+        image.onerror = () => resolve(null);
+        image.src = objectUrl;
+      }),
+      1500,
+      null
+    );
+
+    if (dataUrl) return dataUrl;
+    if (bytes.byteLength <= 120 * 1024) {
+      return await uint8ToDataUrl(bytes, mimeType).catch(() => null);
+    }
+    return null;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 export async function resizeImageFileToDataUrl(
@@ -107,94 +202,153 @@ export async function resizeImageFileToDataUrl(
 
 async function measureAudioDurationFallback(blob: Blob): Promise<number> {
   const url = URL.createObjectURL(blob);
+  const audio = new Audio();
   try {
-    return await new Promise<number>((resolve) => {
-      const audio = new Audio();
-      audio.preload = 'metadata';
-      audio.onloadedmetadata = () => {
-        resolve(Number.isFinite(audio.duration) ? audio.duration : 0);
-      };
-      audio.onerror = () => resolve(0);
-      audio.src = url;
-    });
+    return await withTimeout(
+      new Promise<number>((resolve) => {
+        audio.preload = 'metadata';
+        audio.onloadedmetadata = () => {
+          resolve(Number.isFinite(audio.duration) ? audio.duration : 0);
+        };
+        audio.onerror = () => resolve(0);
+        audio.src = url;
+      }),
+      1400,
+      0
+    );
   } finally {
+    audio.onloadedmetadata = null;
+    audio.onerror = null;
+    audio.src = '';
     URL.revokeObjectURL(url);
   }
 }
 
-export async function extractTrackFromFile(
-  file: File,
-  fallbackIndex = 0
-): Promise<{ track: AudioTrack; blob: Blob }> {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'audio';
-  const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[_]+/g, ' ').trim();
+function parseFilenameParts(fileName: string): { title: string; artist: string } {
+  const cleanName = fileName.replace(/\.[^/.]+$/, '').replace(/[_]+/g, ' ').trim();
+  const dashIdx = cleanName.indexOf(' - ');
+  if (dashIdx > 0 && dashIdx < cleanName.length - 3) {
+    const possibleArtist = cleanName.slice(0, dashIdx).trim();
+    const possibleTitle = cleanName.slice(dashIdx + 3).trim();
+    if (possibleArtist && possibleTitle) {
+      return { title: possibleTitle, artist: possibleArtist };
+    }
+  }
+  return { title: cleanName || 'Pista sin título', artist: 'Artista local' };
+}
 
-  let title = cleanName || 'Pista sin título';
-  let artist = 'Artista local';
-  let album = 'Biblioteca local';
-  let genre = '';
-  let year = '';
-  let trackNumber = '';
-  let duration = 0;
-  let sampleRate: number | undefined;
-  let bitDepth: number | undefined;
-  let bitrate: number | undefined;
-  let formatLabel = ext.toUpperCase();
-  let lossless = LOSSLESS_EXTENSIONS.has(ext);
-  let coverUrl = fallbackIndex % 2 === 0 ? DEFAULT_COVER_SAKURA : DEFAULT_COVER_CLOUD;
+export function createInstantTrackPlaceholder(file: File, fallbackIndex = 0): AudioTrack {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'audio';
+  const parsed = parseFilenameParts(file.name);
+  const coverUrl = fallbackIndex % 2 === 0 ? DEFAULT_COVER_SAKURA : DEFAULT_COVER_CLOUD;
+
+  return {
+    id: crypto.randomUUID(),
+    title: parsed.title,
+    artist: parsed.artist,
+    album: 'Biblioteca local',
+    duration: 0,
+    format: ext.toUpperCase(),
+    lossless: LOSSLESS_EXTENSIONS.has(ext),
+    fileSize: file.size,
+    coverUrl,
+    originalCoverUrl: coverUrl,
+    isFavorite: false,
+    playCount: 0,
+    createdAt: Date.now() - fallbackIndex,
+  };
+}
+
+export async function extractTrackMetadataIntoTrack(
+  file: File,
+  baseTrack: AudioTrack
+): Promise<AudioTrack> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'audio';
+  let title = baseTrack.title;
+  let artist = baseTrack.artist;
+  let album = baseTrack.album;
+  let genre = baseTrack.genre;
+  let year = baseTrack.year;
+  let trackNumber = baseTrack.trackNumber;
+  let duration = baseTrack.duration;
+  let sampleRate = baseTrack.sampleRate;
+  let bitDepth = baseTrack.bitDepth;
+  let bitrate = baseTrack.bitrate;
+  let formatLabel = baseTrack.format;
+  let lossless = baseTrack.lossless;
+  let coverUrl = baseTrack.coverUrl;
 
   try {
-    const metadata = await parseBlob(file, { duration: true });
-    if (metadata.common.title?.trim()) title = metadata.common.title.trim();
-    if (metadata.common.artist?.trim()) artist = metadata.common.artist.trim();
-    if (metadata.common.album?.trim()) album = metadata.common.album.trim();
-    if (metadata.common.genre?.[0]?.trim()) genre = metadata.common.genre[0].trim();
-    if (metadata.common.year) year = String(metadata.common.year);
-    if (metadata.common.track?.no) trackNumber = String(metadata.common.track.no);
+    const metadata = await withTimeout(
+      parseBlob(file, { duration: false, skipCovers: false }),
+      2500,
+      null
+    );
 
-    if (metadata.format.duration && Number.isFinite(metadata.format.duration)) {
-      duration = metadata.format.duration;
-    }
-    if (metadata.format.sampleRate) {
-      sampleRate = metadata.format.sampleRate;
-    }
-    if (metadata.format.bitsPerSample) {
-      bitDepth = metadata.format.bitsPerSample;
-    }
-    if (metadata.format.bitrate) {
-      bitrate = Math.round(metadata.format.bitrate / 1000);
-    }
-    if (metadata.format.codec) {
-      const codecUpper = metadata.format.codec.toUpperCase();
-      if (codecUpper.includes('FLAC')) formatLabel = 'FLAC';
-      else if (codecUpper.includes('ALAC')) formatLabel = 'ALAC';
-      else if (codecUpper.includes('PCM')) formatLabel = ext === 'aiff' || ext === 'aif' ? 'AIFF' : 'WAV';
-      else if (codecUpper.includes('OPUS')) formatLabel = 'OPUS';
-      else if (codecUpper.includes('VORBIS')) formatLabel = 'OGG';
-      else if (codecUpper.includes('MPEG')) formatLabel = 'MP3';
-      else if (codecUpper.includes('AAC')) formatLabel = 'AAC';
-      else formatLabel = ext.toUpperCase();
-    }
-    if (typeof metadata.format.lossless === 'boolean') {
-      lossless = metadata.format.lossless;
-    } else if (formatLabel === 'ALAC' || formatLabel === 'FLAC' || formatLabel === 'WAV' || formatLabel === 'AIFF') {
-      lossless = true;
-    }
+    if (metadata) {
+      if (metadata.common.title?.trim()) title = metadata.common.title.trim();
+      if (metadata.common.artist?.trim()) artist = metadata.common.artist.trim();
+      if (metadata.common.album?.trim()) album = metadata.common.album.trim();
+      if (metadata.common.genre?.[0]?.trim()) genre = metadata.common.genre[0].trim();
+      if (metadata.common.year) year = String(metadata.common.year);
+      if (metadata.common.track?.no) trackNumber = String(metadata.common.track.no);
 
-    const picture = metadata.common.picture?.[0];
-    if (picture && picture.data?.length) {
-      coverUrl = await uint8ToDataUrl(picture.data, picture.format || 'image/jpeg');
+      if (metadata.format.duration && Number.isFinite(metadata.format.duration)) {
+        duration = metadata.format.duration;
+      }
+      if (metadata.format.sampleRate) {
+        sampleRate = metadata.format.sampleRate;
+      }
+      if (metadata.format.bitsPerSample) {
+        bitDepth = metadata.format.bitsPerSample;
+      }
+      if (metadata.format.bitrate) {
+        bitrate = Math.round(metadata.format.bitrate / 1000);
+      }
+      if (metadata.format.codec) {
+        const codecUpper = metadata.format.codec.toUpperCase();
+        if (codecUpper.includes('FLAC')) formatLabel = 'FLAC';
+        else if (codecUpper.includes('ALAC')) formatLabel = 'ALAC';
+        else if (codecUpper.includes('PCM')) formatLabel = ext === 'aiff' || ext === 'aif' ? 'AIFF' : 'WAV';
+        else if (codecUpper.includes('OPUS')) formatLabel = 'OPUS';
+        else if (codecUpper.includes('VORBIS')) formatLabel = 'OGG';
+        else if (codecUpper.includes('MPEG')) formatLabel = 'MP3';
+        else if (codecUpper.includes('AAC')) formatLabel = 'AAC';
+        else formatLabel = ext.toUpperCase();
+      }
+      if (typeof metadata.format.lossless === 'boolean') {
+        lossless = metadata.format.lossless;
+      } else if (
+        formatLabel === 'ALAC' ||
+        formatLabel === 'FLAC' ||
+        formatLabel === 'WAV' ||
+        formatLabel === 'AIFF'
+      ) {
+        lossless = true;
+      }
+
+      const picture = metadata.common.picture?.[0];
+      if (picture && picture.data?.length) {
+        const compressed = await compressCoverBytesToDataUrl(
+          picture.data,
+          picture.format || 'image/jpeg',
+          260
+        );
+        if (compressed) {
+          coverUrl = compressed;
+        }
+      }
     }
   } catch (err) {
     console.warn('Metadata parse fallback for', file.name, err);
   }
 
-  if (!duration || duration <= 0) {
+  if ((!duration || duration <= 0) && file.size <= 80 * 1024 * 1024) {
     duration = await measureAudioDurationFallback(file);
   }
 
-  const track: AudioTrack = {
-    id: crypto.randomUUID(),
+  return {
+    ...baseTrack,
     title,
     artist,
     album,
@@ -207,15 +361,18 @@ export async function extractTrackFromFile(
     sampleRate,
     bitDepth,
     bitrate,
-    fileSize: file.size,
     coverUrl,
     originalCoverUrl: coverUrl,
-    isFavorite: false,
-    playCount: 0,
-    createdAt: Date.now(),
   };
+}
 
-  return { track, blob: file };
+export async function extractTrackFromFile(
+  file: File,
+  fallbackIndex = 0
+): Promise<{ track: AudioTrack; blob: Blob }> {
+  const placeholder = createInstantTrackPlaceholder(file, fallbackIndex);
+  const enriched = await extractTrackMetadataIntoTrack(file, placeholder);
+  return { track: enriched, blob: file };
 }
 
 function encodeMonoWav(samples: Float32Array, sampleRate: number): Blob {
@@ -275,15 +432,19 @@ function blobToBase64(blob: Blob): Promise<string> {
 export async function prepareAudioSnippetForAI(
   blob: Blob
 ): Promise<{ base64: string; mimeType: string } | null> {
-  // If original file is already small (< 3.5MB) and standard web mime, send directly
-  if (blob.size <= 3.5 * 1024 * 1024 && (blob.type === 'audio/mpeg' || blob.type === 'audio/wav' || blob.type === 'audio/ogg')) {
+  if (
+    blob.size <= 3.5 * 1024 * 1024 &&
+    (blob.type === 'audio/mpeg' || blob.type === 'audio/wav' || blob.type === 'audio/ogg')
+  ) {
     const base64 = await blobToBase64(blob);
     return { base64, mimeType: blob.type };
   }
 
   try {
     const arrayBuffer = await blob.arrayBuffer();
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const tempCtx = new AudioCtx();
     const decoded = await tempCtx.decodeAudioData(arrayBuffer);
     await tempCtx.close();

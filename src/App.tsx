@@ -44,7 +44,8 @@ import { playButtonSound } from './utils/asmrSounds';
 import { copyTextSafely, getShareableAppUrl } from './utils/shareLink';
 import {
   collectAudioFilesFromDirectory,
-  extractTrackFromFile,
+  createInstantTrackPlaceholder,
+  extractTrackMetadataIntoTrack,
   isSupportedAudioFile,
   prepareAudioSnippetForAI,
 } from './utils/audioMetadata';
@@ -56,9 +57,11 @@ import {
   getMusicDirHandle,
   getTrackBlob,
   type PersistableDirectoryHandle,
+  registerMemoryBlob,
   saveMusicDirHandle,
   savePlaylist,
   saveTrack,
+  saveTracksBatch,
 } from './utils/db';
 import { generateStarterSampleTracks } from './utils/sampleTracks';
 
@@ -200,6 +203,7 @@ export default function App() {
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
   const savedDirHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
   const permissionFolderInputRef = useRef<HTMLInputElement | null>(null);
+  const permissionFilesInputRef = useRef<HTMLInputElement | null>(null);
   const permCheckedRef = useRef(false);
   const tracksRef = useRef<AudioTrack[]>([]);
   tracksRef.current = tracks;
@@ -511,10 +515,19 @@ export default function App() {
 
   const handleImportFiles = useCallback(
     async (fileList: FileList | File[], silentIfAlreadyPresent = false) => {
-      const supported = Array.from(fileList).filter(isSupportedAudioFile);
-      if (supported.length === 0) return;
+      const rawFiles = Array.from(fileList);
+      if (rawFiles.length === 0) return;
 
-      // Deduplicate against already imported tracks (same file size + matching cleaned filename)
+      const supported = rawFiles.filter(isSupportedAudioFile);
+      if (supported.length === 0) {
+        if (!silentIfAlreadyPresent) {
+          setImportSummary('No se encontraron archivos de audio compatibles en tu selección.');
+          window.setTimeout(() => setImportSummary(null), 4000);
+        }
+        return;
+      }
+
+      // Deduplicate against already imported tracks
       const existingKeys = new Set(
         tracksRef.current.map((tr) => `${tr.fileSize}:${tr.title.trim().toLowerCase()}`)
       );
@@ -524,7 +537,15 @@ export default function App() {
           .replace(/[_]+/g, ' ')
           .trim()
           .toLowerCase();
-        return !existingKeys.has(`${file.size}:${cleanName}`);
+        const dashIdx = cleanName.indexOf(' - ');
+        const parsedTitle =
+          dashIdx > 0 && dashIdx < cleanName.length - 3
+            ? cleanName.slice(dashIdx + 3).trim()
+            : cleanName;
+        return (
+          !existingKeys.has(`${file.size}:${cleanName}`) &&
+          !existingKeys.has(`${file.size}:${parsedTitle}`)
+        );
       });
 
       if (files.length === 0) {
@@ -535,40 +556,54 @@ export default function App() {
         return;
       }
 
+      // 1. Add ALL tracks to UI & memory cache IMMEDIATELY so songs appear at once and play right away
+      const instantPairs = files.map((file, idx) => {
+        const track = createInstantTrackPlaceholder(file, idx);
+        registerMemoryBlob(track.id, file);
+        return { file, track };
+      });
+      const instantTracks = instantPairs.map((p) => p.track);
+
+      setTracks((prev) => [...instantTracks, ...prev]);
+
+      if (!audio.currentTrackId && instantTracks.length > 0) {
+        audio.loadAndPlayTrack(
+          instantTracks[0].id,
+          instantTracks.map((tr) => tr.id)
+        );
+      }
+
       setIsImporting(true);
       setImportSummary(null);
-      setImportProgress({ done: 0, total: files.length });
+      setImportProgress({ done: 0, total: instantPairs.length });
 
+      // 2. Extract metadata, shrink cover thumbnails, and batch-save to IndexedDB in the background
       try {
-        const importedTracks: AudioTrack[] = [];
-        const CHUNK_SIZE = 4;
-
-        for (let start = 0; start < files.length; start += CHUNK_SIZE) {
-          const slice = files.slice(start, start + CHUNK_SIZE);
-          const extracted = await Promise.all(
-            slice.map((file, offset) => extractTrackFromFile(file, start + offset))
+        const CHUNK_SIZE = 6;
+        for (let start = 0; start < instantPairs.length; start += CHUNK_SIZE) {
+          const slice = instantPairs.slice(start, start + CHUNK_SIZE);
+          const enrichedBatch = await Promise.all(
+            slice.map(async ({ file, track }) => {
+              const enriched = await extractTrackMetadataIntoTrack(file, track);
+              return { track: enriched, blob: file };
+            })
           );
-          for (const item of extracted) {
-            await saveTrack(item.track, item.blob);
-            importedTracks.push(item.track);
-          }
+
+          const enrichedMap = new Map(enrichedBatch.map((b) => [b.track.id, b.track]));
+          setTracks((prev) => prev.map((tr) => enrichedMap.get(tr.id) ?? tr));
+
+          await saveTracksBatch(enrichedBatch);
+
           setImportProgress({
-            done: Math.min(files.length, start + slice.length),
-            total: files.length,
+            done: Math.min(instantPairs.length, start + slice.length),
+            total: instantPairs.length,
           });
         }
 
-        setTracks((prev) => [...importedTracks, ...prev]);
-        if (!audio.currentTrackId && importedTracks.length > 0) {
-          audio.loadAndPlayTrack(
-            importedTracks[0].id,
-            importedTracks.map((tr) => tr.id)
-          );
-        }
         setImportSummary(
-          importedTracks.length === 1
+          instantTracks.length === 1
             ? 'Se agregó 1 canción a tu biblioteca.'
-            : `Se agregaron ${importedTracks.length} canciones a tu biblioteca.`
+            : `Se agregaron ${instantTracks.length} canciones a tu biblioteca.`
         );
         window.setTimeout(() => setImportSummary(null), 4000);
       } catch (err) {
@@ -673,7 +708,12 @@ export default function App() {
       }
     }
 
-    permissionFolderInputRef.current?.click();
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      permissionFilesInputRef.current?.click();
+    } else {
+      permissionFolderInputRef.current?.click();
+    }
   };
 
   const handleLoadSampleTracks = async () => {
@@ -1378,11 +1418,28 @@ export default function App() {
         webkitdirectory=""
         className="hidden"
         onChange={(e) => {
-          if (e.target.files?.length) {
-            handleImportFiles(e.target.files);
+          const picked = e.target.files ? Array.from(e.target.files) : [];
+          e.target.value = '';
+          if (picked.length > 0) {
+            handleImportFiles(picked);
             setMusicPermissionOpen(false);
           }
+        }}
+      />
+
+      <input
+        ref={permissionFilesInputRef}
+        type="file"
+        multiple
+        accept="audio/*,.flac,.wav,.alac,.aiff,.aif,.m4a,.m4b,.mp3,.ogg,.opus,.aac,.wma,.webm,.mp4"
+        className="hidden"
+        onChange={(e) => {
+          const picked = e.target.files ? Array.from(e.target.files) : [];
           e.target.value = '';
+          if (picked.length > 0) {
+            handleImportFiles(picked);
+            setMusicPermissionOpen(false);
+          }
         }}
       />
 

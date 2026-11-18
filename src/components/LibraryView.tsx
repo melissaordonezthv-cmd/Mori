@@ -157,10 +157,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         if (err instanceof DOMException && err.name === 'AbortError') {
           return;
         }
-        // Fall back to standard webkitdirectory input if blocked in iframe/mobile
+        // Fall back below if blocked in iframe/mobile
       }
     }
-    folderInputRef.current?.click();
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      fileInputRef.current?.click();
+    } else {
+      folderInputRef.current?.click();
+    }
   };
 
   const hasBanner = Boolean(bannerImageUrl?.trim() || bannerText?.trim());
@@ -295,7 +300,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             {/* Quick Action Buttons */}
             <button
               type="button"
-              disabled={isImporting}
               onClick={() => fileInputRef.current?.click()}
               title={t.importFiles}
               aria-label={t.importFiles}
@@ -311,7 +315,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
             <button
               type="button"
-              disabled={isImporting}
               onClick={handleImportWholeFolder}
               title="Importar carpeta (todas)"
               aria-label="Importar carpeta (todas)"
@@ -361,11 +364,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               ref={fileInputRef}
               type="file"
               multiple
-              accept="audio/*,.flac,.wav,.alac,.aiff,.aif,.m4a,.mp3,.ogg,.opus,.aac"
+              accept="audio/*,.flac,.wav,.alac,.aiff,.aif,.m4a,.m4b,.mp3,.ogg,.opus,.aac,.wma,.webm,.mp4"
               className="hidden"
               onChange={(e) => {
-                if (e.target.files?.length) onImportFiles(e.target.files);
+                const picked = e.target.files ? Array.from(e.target.files) : [];
                 e.target.value = '';
+                if (picked.length > 0) onImportFiles(picked);
               }}
             />
             <input
@@ -376,8 +380,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               webkitdirectory=""
               className="hidden"
               onChange={(e) => {
-                if (e.target.files?.length) onImportFiles(e.target.files);
+                const picked = e.target.files ? Array.from(e.target.files) : [];
                 e.target.value = '';
+                if (picked.length > 0) onImportFiles(picked);
               }}
             />
           </nav>
@@ -480,7 +485,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               {importProgress && (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-medium">
-                    <span>Cargando canciones a tu biblioteca…</span>
+                    <span>¡Listas para reproducir! Guardando portadas…</span>
                     <span className="font-mono-nums" style={{ color: 'var(--text-muted)' }}>
                       {importProgress.done} / {importProgress.total}
                     </span>

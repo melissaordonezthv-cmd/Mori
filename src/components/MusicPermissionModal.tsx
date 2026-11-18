@@ -132,14 +132,15 @@ export const MusicPermissionModal: React.FC<MusicPermissionModalProps> = ({
             ref={fallbackFilesRef}
             type="file"
             multiple
-            accept="audio/*,.flac,.wav,.alac,.aiff,.aif,.m4a,.mp3,.ogg,.opus,.aac"
+            accept="audio/*,.flac,.wav,.alac,.aiff,.aif,.m4a,.m4b,.mp3,.ogg,.opus,.aac,.wma,.webm,.mp4"
             className="hidden"
             onChange={(e) => {
-              if (e.target.files?.length) {
-                onSelectFallbackFiles(e.target.files);
+              const picked = e.target.files ? Array.from(e.target.files) : [];
+              e.target.value = '';
+              if (picked.length > 0) {
+                onSelectFallbackFiles(picked);
                 onDismiss(false);
               }
-              e.target.value = '';
             }}
           />
         </div>
