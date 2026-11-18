@@ -1,0 +1,8 @@
+{
+  "name": "MoriNote",
+  "description": "Reproductor de música sin pérdida personalizable con letras IA, traducción instantánea, listas personalizadas y perfil aesthetic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

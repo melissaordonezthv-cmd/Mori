@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-app: #fff0f5;
+    --bg-surface: #fce7f0;
+    --bg-elevated: #ffffff;
+    --accent-color: #f4b8cc;
+    --accent-soft: rgba(244, 184, 204, 0.28);
+    --song-bar-color: #f4b8cc;
+    --text-main: #1c1b1f;
+    --text-muted: rgba(28, 27, 31, 0.65);
+    --divider-color: rgba(244, 184, 204, 0.55);
+    --lyrics-color: #1c1b1f;
+    --mood-aura-1: rgba(244, 184, 204, 0.35);
+    --mood-aura-2: rgba(159, 211, 247, 0.25);
+  }
+
+  html,
+  body {
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    transition: background-color 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      color 0.25s ease;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-display {
+    font-family: "Plus Jakarta Sans", "DM Sans", sans-serif;
+  }
+
+  .font-mono-nums {
+    font-family: "JetBrains Mono", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom sleek pastel scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--divider-color);
+  border-radius: 9999px;
+}
+
+@keyframes slow-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.vinyl-spin {
+  animation: slow-spin 18s linear infinite;
+}
+
+.vinyl-spin-paused {
+  animation: slow-spin 18s linear infinite;
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vinyl-spin,
+  .vinyl-spin-paused {
+    animation: none;
+  }
+}
