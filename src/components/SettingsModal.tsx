@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Check,
   ChevronDown,
@@ -6,9 +6,12 @@ import {
   Copy,
   Disc3,
   Download,
+  Droplets,
   FolderHeart,
   Globe,
   Headphones,
+  ImagePlus,
+  KeyRound,
   Layers,
   Maximize2,
   Minimize2,
@@ -21,6 +24,7 @@ import {
   Sparkles,
   Tablet,
   Timer,
+  Trash2,
   Type,
   Volume2,
   X,
@@ -30,9 +34,13 @@ import {
   AUDIO_MODE_PROFILES,
   DEFAULT_COVER_SAKURA,
   EQ_PRESETS,
+  MUSIC_CARD_OUTER_ICONS,
   NOW_PLAYING_COLOR_PRESETS,
   NOW_PLAYING_VISUAL_OPTIONS,
+  SCREEN_OVERLAY_FILTER_OPTIONS,
   TEXT_SWATCHES,
+  WALLPAPER_FILTER_OPTIONS,
+  WALLPAPER_MOTION_OPTIONS,
 } from '../constants/themes';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import type {
@@ -41,9 +49,18 @@ import type {
   AudioEngineMode,
   EqPresetId,
   LayoutOrientation,
+  MusicCardOuterIconId,
+  ProfileConfig,
   SettingsTextColorId,
+  ThemeConfig,
 } from '../types/music';
-import { getShareableAppUrl } from '../utils/shareLink';
+import { copyTextSafely, getShareableAppUrl } from '../utils/shareLink';
+import {
+  compressWallpaperImage,
+  decodeStyleCode,
+  encodeStyleCode,
+} from '../utils/styleCode';
+import { MusicCardOuterIcon, MusicCardOuterSvg } from './MusicCardOuterIcon';
 import { NowPlayingVisualStage } from './NowPlayingVisualStage';
 
 function hexToMutedRgba(hex: string): string {
@@ -59,6 +76,8 @@ function hexToMutedRgba(hex: string): string {
 interface SettingsModalProps {
   open: boolean;
   settings: AppSettings;
+  theme: ThemeConfig;
+  profile: ProfileConfig;
   sleepMinutesRemaining: number | null;
   sleepOnTrackEnd: boolean;
   isFloatingOpen: boolean;
@@ -69,6 +88,11 @@ interface SettingsModalProps {
   fullscreenError?: string | null;
   t: Translations;
   onChangeSettings: (next: AppSettings) => void;
+  onApplyStyleCode: (
+    nextTheme: ThemeConfig,
+    nextProfile: ProfileConfig,
+    nextSettings: AppSettings
+  ) => void;
   onSetSleepTimer: (minutes: number | null, onTrackEnd?: boolean) => void;
   onToggleFloating: () => void;
   onToggleWidget: () => void;
@@ -113,6 +137,8 @@ const ORIENTATION_OPTIONS: Array<{
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   open,
   settings,
+  theme,
+  profile,
   sleepMinutesRemaining,
   sleepOnTrackEnd,
   isFloatingOpen,
@@ -123,6 +149,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   fullscreenError = null,
   t,
   onChangeSettings,
+  onApplyStyleCode,
   onSetSleepTimer,
   onToggleFloating,
   onToggleWidget,
@@ -138,10 +165,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showHomeScreenGuide, setShowHomeScreenGuide] = useState(false);
   const [showAllTextColors, setShowAllTextColors] = useState(false);
+  const [showAllOuterIcons, setShowAllOuterIcons] = useState(false);
+  const [showAllScreenFilters, setShowAllScreenFilters] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [resetDoneMsg, setResetDoneMsg] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [importCodeInput, setImportCodeInput] = useState('');
+  const [codeFeedback, setCodeFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [wallpaperError, setWallpaperError] = useState<string | null>(null);
+  const wallpaperFileRef = useRef<HTMLInputElement | null>(null);
+
+  const generatedStyleCode = useMemo(
+    () => encodeStyleCode(theme, profile, settings),
+    [theme, profile, settings]
+  );
 
   if (!open) return null;
+
+  const handleCopyStyleCode = async () => {
+    const ok = await copyTextSafely(generatedStyleCode);
+    if (ok) {
+      setCodeCopied(true);
+      window.setTimeout(() => setCodeCopied(false), 2400);
+    }
+  };
+
+  const handleApplyIncomingCode = () => {
+    const res = decodeStyleCode(importCodeInput, theme, profile, settings);
+    if (res.ok === false) {
+      setCodeFeedback({ ok: false, msg: res.error });
+      return;
+    }
+    onApplyStyleCode(res.nextTheme, res.nextProfile, res.nextSettings);
+    setImportCodeInput('');
+    setCodeFeedback({
+      ok: true,
+      msg: '¡Estilo aplicado a tu pantalla principal y perfil! Tus fotos de perfil, fondos y banners se conservaron.',
+    });
+  };
+
+  const handleWallpaperPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setWallpaperError(null);
+    try {
+      const compressed = await compressWallpaperImage(file);
+      onChangeSettings({
+        ...settings,
+        wallpaperUrl: compressed,
+        wallpaperOpacity: settings.wallpaperOpacity ?? 85,
+      });
+    } catch (err) {
+      setWallpaperError(
+        err instanceof Error ? err.message : 'No se pudo cargar la imagen de fondo.'
+      );
+    }
+  };
 
   const appUrl = getShareableAppUrl();
 
@@ -269,6 +349,117 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </section>
 
+          {/* Style Share Code (Always active: Give & Receive without banners/profile photos) */}
+          <section
+            className="p-4 rounded-2xl border space-y-4"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--divider-color)',
+            }}
+          >
+            <div className="flex items-start gap-2.5">
+              <KeyRound className="w-5 h-5 mt-0.5 shrink-0" />
+              <div>
+                <h3 className="text-sm font-semibold">Código de estilo (Dar y Recibir)</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  Comparte o aplica todo tu diseño de pantalla principal y perfil (colores, formas, botones 3D, tarjetas, ícono exterior, marco, dijes y filtros). Nunca copia tus fotos de perfil, fondos ni banners.
+                </p>
+              </div>
+            </div>
+
+            {/* Give / Copy my code */}
+            <div
+              className="p-3 rounded-2xl border space-y-2"
+              style={{
+                backgroundColor: 'var(--bg-elevated)',
+                borderColor: 'var(--divider-color)',
+              }}
+            >
+              <p className="text-xs font-semibold">Dar mi código de estilo</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={generatedStyleCode}
+                  aria-label="Código de estilo para compartir"
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="flex-1 min-h-[40px] px-3 rounded-xl border text-[11px] font-mono-nums focus:outline-none"
+                  style={{
+                    backgroundColor: 'var(--bg-surface)',
+                    borderColor: 'var(--divider-color)',
+                    color: 'var(--text-main)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyStyleCode}
+                  className="btn-raw min-h-[40px] px-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shrink-0 transition active:scale-95"
+                  style={{
+                    backgroundColor: 'var(--accent-color)',
+                    color: '#1C1B1F',
+                  }}
+                >
+                  {codeCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{codeCopied ? '¡Código copiado!' : 'Copiar mi código'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Receive / Paste friend's code */}
+            <div
+              className="p-3 rounded-2xl border space-y-2"
+              style={{
+                backgroundColor: 'var(--bg-elevated)',
+                borderColor: 'var(--divider-color)',
+              }}
+            >
+              <p className="text-xs font-semibold">Recibir código de otra persona</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={importCodeInput}
+                  onChange={(e) => {
+                    setImportCodeInput(e.target.value);
+                    if (codeFeedback) setCodeFeedback(null);
+                  }}
+                  placeholder="Pega aquí el código MORI1-…"
+                  aria-label="Pegar código de estilo"
+                  className="flex-1 min-h-[40px] px-3 rounded-xl border text-xs font-mono-nums focus:outline-none"
+                  style={{
+                    backgroundColor: 'var(--bg-surface)',
+                    borderColor: 'var(--divider-color)',
+                    color: 'var(--text-main)',
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={!importCodeInput.trim()}
+                  onClick={handleApplyIncomingCode}
+                  className="btn-raw min-h-[40px] px-4 py-2 rounded-xl border text-xs font-semibold shrink-0 transition disabled:opacity-50"
+                  style={{
+                    backgroundColor: 'var(--accent-soft)',
+                    borderColor: 'var(--divider-color)',
+                    color: 'var(--text-main)',
+                  }}
+                >
+                  Aplicar estilo
+                </button>
+              </div>
+
+              {codeFeedback && (
+                <p
+                  className="text-xs px-3 py-2 rounded-xl border"
+                  style={{
+                    backgroundColor: codeFeedback.ok ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  {codeFeedback.msg}
+                </p>
+              )}
+            </div>
+          </section>
+
           {/* Settings-only Letter Color Palette & Reset Colors Button */}
           <section
             className="p-4 rounded-2xl border space-y-4"
@@ -339,12 +530,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   return (r * 299 + g * 587 + b * 114) / 1000 > 165;
                 };
                 const isLightSwatch =
-                  opt.id === 'blanco' ||
-                  opt.id === 'crema' ||
-                  opt.id === 'amarillo' ||
-                  (opt.id === 'custom' &&
-                    Boolean(settings.settingsTextCustomHex) &&
-                    isLightHex(customSettingsHex));
+                  opt.id !== 'auto' &&
+                  (opt.id === 'custom'
+                    ? Boolean(settings.settingsTextCustomHex) && isLightHex(customSettingsHex)
+                    : isLightHex(opt.hex));
                 const dotBg =
                   opt.id === 'auto'
                     ? 'var(--bg-elevated)'
@@ -583,6 +772,356 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {fullscreenError}
               </p>
             )}
+
+            {/* Optional Full-Screen Overlay Filters */}
+            <div
+              className="pt-3 border-t space-y-3"
+              style={{ borderColor: 'var(--divider-color)' }}
+            >
+              <div className="flex items-start gap-2.5">
+                <Droplets className="w-4 h-4 mt-0.5 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-semibold">
+                    Filtros sobre toda la pantalla (Opcional)
+                  </h4>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    Efecto visual translúcido en toda la app y en pantalla completa (no bloquea tus toques)
+                  </p>
+                </div>
+              </div>
+
+              {(() => {
+                const activeScreenFilter = settings.screenOverlayFilter ?? 'none';
+                const visibleScreenFilters = (() => {
+                  if (showAllScreenFilters || SCREEN_OVERLAY_FILTER_OPTIONS.length <= 9) {
+                    return SCREEN_OVERLAY_FILTER_OPTIONS;
+                  }
+                  const head = SCREEN_OVERLAY_FILTER_OPTIONS.slice(0, 9);
+                  if (!head.some((opt) => opt.id === activeScreenFilter)) {
+                    const found = SCREEN_OVERLAY_FILTER_OPTIONS.find(
+                      (opt) => opt.id === activeScreenFilter
+                    );
+                    if (found) {
+                      return [head[0], found, ...head.slice(1, 8)];
+                    }
+                  }
+                  return head;
+                })();
+
+                const handleSelectScreenFilter = (filterId: typeof activeScreenFilter) => {
+                  // On iOS 13+ browsers, request gyroscope permission within user tap gesture for fluid water tilt
+                  if (
+                    filterId === 'crystal_drops_tilt' ||
+                    filterId === 'fluid_bottom_water' ||
+                    filterId === 'rainy_window' ||
+                    filterId === 'water_ripples'
+                  ) {
+                    const devOrient = window.DeviceOrientationEvent as unknown as {
+                      requestPermission?: () => Promise<string>;
+                    };
+                    if (typeof devOrient?.requestPermission === 'function') {
+                      devOrient.requestPermission().catch(() => {});
+                    }
+                    const devMotion = window.DeviceMotionEvent as unknown as {
+                      requestPermission?: () => Promise<string>;
+                    };
+                    if (typeof devMotion?.requestPermission === 'function') {
+                      devMotion.requestPermission().catch(() => {});
+                    }
+                  }
+                  onChangeSettings({
+                    ...settings,
+                    screenOverlayFilter: filterId,
+                  });
+                };
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {visibleScreenFilters.map((opt) => {
+                        const active = activeScreenFilter === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => handleSelectScreenFilter(opt.id)}
+                            className="btn-raw p-2.5 rounded-2xl border text-left transition flex flex-col gap-0.5"
+                            style={{
+                              backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                              borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                            }}
+                          >
+                            <span className="text-xs font-bold truncate">{opt.label}</span>
+                            <span
+                              className="text-[10px] leading-snug line-clamp-2"
+                              style={{ color: 'var(--text-muted)' }}
+                            >
+                              {opt.description}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {SCREEN_OVERLAY_FILTER_OPTIONS.length > 9 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllScreenFilters((v) => !v)}
+                        className="btn-raw w-full min-h-[36px] px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                        style={{
+                          backgroundColor: 'var(--bg-elevated)',
+                          borderColor: 'var(--divider-color)',
+                          color: 'var(--text-main)',
+                        }}
+                      >
+                        <span>
+                          {showAllScreenFilters
+                            ? 'Mostrar solo una parte'
+                            : `Ver todos los ${SCREEN_OVERLAY_FILTER_OPTIONS.length} filtros de pantalla`}
+                        </span>
+                        {showAllScreenFilters ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
+
+              {(settings.screenOverlayFilter ?? 'none') !== 'none' && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs font-medium">
+                    <span>Intensidad del filtro de pantalla</span>
+                    <span className="font-mono-nums" style={{ color: 'var(--text-muted)' }}>
+                      {settings.screenOverlayIntensity ?? 65}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={20}
+                    max={100}
+                    step={5}
+                    aria-label="Intensidad del filtro de pantalla"
+                    value={settings.screenOverlayIntensity ?? 65}
+                    onChange={(e) =>
+                      onChangeSettings({
+                        ...settings,
+                        screenOverlayIntensity: Number(e.target.value),
+                      })
+                    }
+                    className="w-full accent-current cursor-pointer"
+                  />
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Optional Background Wallpaper Behind All Accessories + Filters & Motion */}
+          <section
+            className="p-4 rounded-2xl border space-y-4"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--divider-color)',
+            }}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <ImagePlus className="w-5 h-5 mt-0.5 shrink-0" />
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    Fondo de pantalla detrás de los accesorios (Opcional)
+                  </h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    Coloca tu imagen detrás de todas las tarjetas, adornos y reproductor, con filtro borroso o movimiento natural opcional
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => wallpaperFileRef.current?.click()}
+                  className="btn-raw min-h-[38px] px-3.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5"
+                  style={{
+                    backgroundColor: 'var(--accent-color)',
+                    borderColor: 'var(--divider-color)',
+                    color: '#1C1B1F',
+                  }}
+                >
+                  <ImagePlus className="w-3.5 h-3.5" />
+                  <span>{settings.wallpaperUrl ? 'Cambiar foto' : 'Elegir fondo'}</span>
+                </button>
+                {settings.wallpaperUrl && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChangeSettings({
+                        ...settings,
+                        wallpaperUrl: '',
+                      })
+                    }
+                    aria-label="Quitar fondo de pantalla"
+                    className="btn-raw min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1"
+                    style={{
+                      backgroundColor: 'var(--bg-elevated)',
+                      borderColor: 'var(--divider-color)',
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Quitar</span>
+                  </button>
+                )}
+              </div>
+              <input
+                ref={wallpaperFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleWallpaperPick}
+              />
+            </div>
+
+            {wallpaperError && (
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                {wallpaperError}
+              </p>
+            )}
+
+            {settings.wallpaperUrl && (
+              <div
+                className="p-3 rounded-2xl border space-y-2.5"
+                style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  borderColor: 'var(--divider-color)',
+                }}
+              >
+                <div className="relative h-28 rounded-xl overflow-hidden border" style={{ borderColor: 'var(--divider-color)' }}>
+                  <img
+                    src={settings.wallpaperUrl}
+                    alt="Vista previa del fondo"
+                    className="w-full h-full object-cover"
+                    style={{
+                      opacity: Math.max(0.2, Math.min(1, (settings.wallpaperOpacity ?? 85) / 100)),
+                      filter:
+                        settings.wallpaperFilter === 'blur_soft'
+                          ? 'blur(7px)'
+                          : undefined,
+                    }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span
+                      className="px-3 py-1.5 rounded-xl border text-[11px] font-semibold backdrop-blur-md"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      Tus accesorios y tarjetas van delante
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs font-medium">
+                    <span>Visibilidad del fondo</span>
+                    <span className="font-mono-nums" style={{ color: 'var(--text-muted)' }}>
+                      {settings.wallpaperOpacity ?? 85}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={25}
+                    max={100}
+                    step={5}
+                    aria-label="Visibilidad del fondo de pantalla"
+                    value={settings.wallpaperOpacity ?? 85}
+                    onChange={(e) =>
+                      onChangeSettings({
+                        ...settings,
+                        wallpaperOpacity: Number(e.target.value),
+                      })
+                    }
+                    className="w-full accent-current cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Optional Blur Wallpaper Filter */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold">Filtro del fondo (opcional)</p>
+              <div className="grid grid-cols-2 gap-2">
+                {WALLPAPER_FILTER_OPTIONS.map((fOpt) => {
+                  const active = (settings.wallpaperFilter ?? 'none') === fOpt.id;
+                  return (
+                    <button
+                      key={fOpt.id}
+                      type="button"
+                      onClick={() =>
+                        onChangeSettings({
+                          ...settings,
+                          wallpaperFilter: fOpt.id,
+                        })
+                      }
+                      className="btn-raw p-2 rounded-xl border text-left transition flex flex-col gap-0.5"
+                      style={{
+                        backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                        borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                      }}
+                    >
+                      <span className="text-[11px] font-bold truncate">{fOpt.label}</span>
+                      <span
+                        className="text-[10px] leading-snug line-clamp-2"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        {fOpt.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Moving Background Nature / Chains / Flowers (Optional) */}
+            <div
+              className="pt-3 border-t space-y-2"
+              style={{ borderColor: 'var(--divider-color)' }}
+            >
+              <p className="text-xs font-semibold">
+                Movimiento natural y adornos de fondo (opcional)
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {WALLPAPER_MOTION_OPTIONS.map((mOpt) => {
+                  const active = (settings.wallpaperMotion ?? 'none') === mOpt.id;
+                  return (
+                    <button
+                      key={mOpt.id}
+                      type="button"
+                      onClick={() =>
+                        onChangeSettings({
+                          ...settings,
+                          wallpaperMotion: mOpt.id,
+                        })
+                      }
+                      className="btn-raw p-2 rounded-xl border text-left transition flex flex-col gap-0.5"
+                      style={{
+                        backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                        borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                      }}
+                    >
+                      <span className="text-[11px] font-bold truncate">{mOpt.label}</span>
+                      <span
+                        className="text-[10px] leading-snug line-clamp-2"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        {mOpt.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </section>
 
           {/* Now Playing Music Card 3D Visual Style & 4-Part Editable Colors */}
@@ -906,6 +1445,433 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </div>
             </div>
+          </section>
+
+          {/* Cute Non-Sticker Outer Vector Icon for Music Card (Outside the Card Only) */}
+          <section
+            className="p-4 rounded-2xl border space-y-4"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--divider-color)',
+            }}
+          >
+            <div className="flex items-start gap-2.5">
+              <Sparkles className="w-5 h-5 mt-0.5 shrink-0" />
+              <div>
+                <h3 className="text-sm font-semibold">
+                  Ícono exterior de la tarjeta de música (sin stickers)
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  Se muestra únicamente por fuera del borde de la carta musical, nunca dentro de la portada. Íconos vectoriales limpios.
+                </p>
+              </div>
+            </div>
+
+            {/* Live Mini Card Preview Showing Icon OUTSIDE the Card */}
+            {(() => {
+              const activeOuterIcon: MusicCardOuterIconId =
+                settings.musicCardOuterIcon ?? 'note_sparkle';
+              const activeOuterColor = settings.musicCardOuterIconColor || 'auto';
+              const iconQuickColors = [
+                { id: 'auto', label: 'Del tema', hex: 'var(--text-main)' },
+                { id: '#1C1B1F', label: 'Negro', hex: '#1C1B1F' },
+                { id: '#FFFFFF', label: 'Blanco', hex: '#FFFFFF' },
+                { id: '#C94D7C', label: 'Rosa', hex: '#C94D7C' },
+                { id: '#B6852E', label: 'Dorado', hex: '#B6852E' },
+                { id: '#4B6B3B', label: 'Pistacho', hex: '#4B6B3B' },
+              ];
+              const visibleIcons = (() => {
+                if (showAllOuterIcons || MUSIC_CARD_OUTER_ICONS.length <= 9) {
+                  return MUSIC_CARD_OUTER_ICONS;
+                }
+                const head = MUSIC_CARD_OUTER_ICONS.slice(0, 9);
+                if (!head.some((ic) => ic.id === activeOuterIcon)) {
+                  const found = MUSIC_CARD_OUTER_ICONS.find((ic) => ic.id === activeOuterIcon);
+                  if (found) return [found, ...MUSIC_CARD_OUTER_ICONS.slice(0, 8)];
+                }
+                return head;
+              })();
+
+              return (
+                <>
+                  <div
+                    className="p-4 rounded-2xl border flex items-center justify-center"
+                    style={{
+                      backgroundColor: 'var(--bg-app)',
+                      borderColor: 'var(--divider-color)',
+                    }}
+                  >
+                    <div className={`relative w-full max-w-xs ${activeOuterIcon !== 'none' ? 'pt-4' : ''}`}>
+                      <MusicCardOuterIcon iconId={activeOuterIcon} color={activeOuterColor} />
+                      <div
+                        className="rounded-2xl border p-3.5 flex items-center gap-3"
+                        style={{
+                          backgroundColor: 'var(--bg-elevated)',
+                          borderColor: 'var(--divider-color)',
+                        }}
+                      >
+                        <img
+                          src={DEFAULT_COVER_SAKURA}
+                          alt="Portada sin adorno interior"
+                          className="w-11 h-11 rounded-xl object-cover shrink-0 border"
+                          style={{ borderColor: 'var(--divider-color)' }}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold truncate">Sakura Rain</p>
+                          <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>
+                            {activeOuterIcon === 'none'
+                              ? 'Tarjeta sin ícono exterior'
+                              : 'Ícono fuera de la carta · portada limpia'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pure Vector Icons Grid */}
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {visibleIcons.map((iconOpt) => {
+                      const active = activeOuterIcon === iconOpt.id;
+                      return (
+                        <button
+                          key={iconOpt.id}
+                          type="button"
+                          onClick={() =>
+                            onChangeSettings({ ...settings, musicCardOuterIcon: iconOpt.id })
+                          }
+                          className="btn-raw min-h-[60px] p-2 rounded-2xl border flex flex-col items-center justify-center gap-1.5 text-center transition"
+                          style={{
+                            backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                            borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                            color: 'var(--text-main)',
+                          }}
+                        >
+                          {iconOpt.id === 'none' ? (
+                            <X className="w-4 h-4 opacity-70" />
+                          ) : (
+                            <MusicCardOuterSvg iconId={iconOpt.id} className="w-5 h-5" />
+                          )}
+                          <span className="text-[10px] font-semibold leading-tight line-clamp-1">
+                            {iconOpt.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {MUSIC_CARD_OUTER_ICONS.length > 9 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllOuterIcons((v) => !v)}
+                      className="btn-raw w-full min-h-[36px] px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                        color: 'var(--text-main)',
+                      }}
+                    >
+                      <span>
+                        {showAllOuterIcons
+                          ? 'Mostrar solo una parte'
+                          : `Ver todos los ${MUSIC_CARD_OUTER_ICONS.length} íconos`}
+                      </span>
+                      {showAllOuterIcons ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Outer Icon Color Options */}
+                  {activeOuterIcon !== 'none' && (
+                    <div
+                      className="pt-2.5 border-t flex flex-wrap items-center justify-between gap-2"
+                      style={{ borderColor: 'var(--divider-color)' }}
+                    >
+                      <span className="text-xs font-semibold">Color del ícono exterior:</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {iconQuickColors.map((col) => {
+                          const selected = activeOuterColor === col.id;
+                          return (
+                            <button
+                              key={col.id}
+                              type="button"
+                              onClick={() =>
+                                onChangeSettings({
+                                  ...settings,
+                                  musicCardOuterIconColor: col.id,
+                                })
+                              }
+                              className="btn-raw min-h-[32px] px-2.5 py-1 rounded-xl border text-[11px] font-medium flex items-center gap-1.5"
+                              style={{
+                                backgroundColor: selected
+                                  ? 'var(--accent-soft)'
+                                  : 'var(--bg-elevated)',
+                                borderColor: selected
+                                  ? 'var(--text-main)'
+                                  : 'var(--divider-color)',
+                              }}
+                            >
+                              <span
+                                className="w-3.5 h-3.5 rounded-full border shrink-0"
+                                style={{
+                                  backgroundColor: col.hex,
+                                  borderColor: 'rgba(128,128,128,0.4)',
+                                }}
+                              />
+                              <span>{col.label}</span>
+                            </button>
+                          );
+                        })}
+                        <label
+                          className="min-h-[32px] px-2 py-1 rounded-xl border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer"
+                          style={{
+                            backgroundColor: 'var(--bg-elevated)',
+                            borderColor: 'var(--divider-color)',
+                          }}
+                        >
+                          <span>Otro</span>
+                          <input
+                            type="color"
+                            value={activeOuterColor === 'auto' ? '#C94D7C' : activeOuterColor}
+                            onChange={(e) =>
+                              onChangeSettings({
+                                ...settings,
+                                musicCardOuterIconColor: e.target.value,
+                              })
+                            }
+                            className="w-5 h-5 rounded border cursor-pointer"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </section>
+
+          {/* Song Card Width & Vertical Length Controls */}
+          <section
+            className="p-4 rounded-2xl border space-y-4"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--divider-color)',
+            }}
+          >
+            {(() => {
+              const currentCardWidth = Math.min(
+                100,
+                Math.max(58, settings.trackCardWidthPercent ?? 78)
+              );
+              const currentCardHeight = Math.min(
+                176,
+                Math.max(56, settings.trackCardHeightPx ?? 118)
+              );
+              const widthPresets = [
+                { value: 64, label: 'Muy delgada' },
+                { value: 78, label: 'Delgada' },
+                { value: 86, label: 'Compacta' },
+                { value: 93, label: 'Media' },
+                { value: 100, label: 'Ancha' },
+              ];
+              const heightPresets = [
+                { value: 64, label: 'Fina' },
+                { value: 86, label: 'Corta' },
+                { value: 102, label: 'Normal' },
+                { value: 118, label: 'Larga' },
+                { value: 148, label: 'Muy larga' },
+              ];
+              return (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <Layers className="w-5 h-5 mt-0.5 shrink-0" />
+                      <div>
+                        <h3 className="text-sm font-semibold">
+                          Tamaño de las tarjetas (Ancho y Largo)
+                        </h3>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                          Ajusta por separado qué tan delgada/ancha y qué tan corta/larga se ve cada tarjeta de canción
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className="text-[11px] font-mono-nums font-semibold px-2.5 py-1 rounded-xl border shrink-0"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      {currentCardWidth}% × {currentCardHeight}px
+                    </span>
+                  </div>
+
+                  {/* Proportional Live Width + Length Preview */}
+                  <div
+                    className="p-3.5 rounded-2xl border flex justify-center"
+                    style={{
+                      backgroundColor: 'var(--bg-app)',
+                      borderColor: 'var(--divider-color)',
+                    }}
+                  >
+                    <div
+                      className="rounded-2xl border p-3 flex flex-col justify-between gap-1.5 transition-all duration-200"
+                      style={{
+                        width: `${currentCardWidth}%`,
+                        minHeight: `${currentCardHeight}px`,
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <img
+                          src={DEFAULT_COVER_SAKURA}
+                          alt="Muestra de tamaño de tarjeta"
+                          className="w-9 h-9 rounded-lg object-cover shrink-0 border"
+                          style={{ borderColor: 'var(--divider-color)' }}
+                        />
+                        <p className="text-xs font-bold truncate">Sakura Rain (Hi-Res)</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-[10px]">
+                        <span className="truncate" style={{ color: 'var(--text-muted)' }}>
+                          MoriNote · FLAC · 3:42
+                        </span>
+                        <span aria-hidden="true" className="opacity-70 shrink-0">
+                          ♡ ✎
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 1. Width (Ancho / Delgado) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span>Ancho (delgada ↔ ancha)</span>
+                      <span className="font-mono-nums" style={{ color: 'var(--text-muted)' }}>
+                        {currentCardWidth}%
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                      {widthPresets.map((preset) => {
+                        const active = currentCardWidth === preset.value;
+                        return (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            onClick={() =>
+                              onChangeSettings({
+                                ...settings,
+                                trackCardWidthPercent: preset.value,
+                              })
+                            }
+                            className="btn-raw min-h-[38px] px-2 py-1.5 rounded-xl border text-[11px] font-semibold flex flex-col items-center justify-center transition"
+                            style={{
+                              backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                              borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                            }}
+                          >
+                            <span>{preset.label}</span>
+                            <span
+                              className="text-[10px] font-mono-nums"
+                              style={{ color: 'var(--text-muted)' }}
+                            >
+                              {preset.value}%
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px] font-medium">
+                        <span style={{ color: 'var(--text-muted)' }}>Más delgada (58%)</span>
+                        <span style={{ color: 'var(--text-muted)' }}>Ancha (100%)</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={58}
+                        max={100}
+                        step={2}
+                        aria-label="Ancho de las tarjetas de canciones"
+                        value={currentCardWidth}
+                        onChange={(e) =>
+                          onChangeSettings({
+                            ...settings,
+                            trackCardWidthPercent: Number(e.target.value),
+                          })
+                        }
+                        className="w-full accent-current cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 2. Vertical Length (Largo / Alto) */}
+                  <div
+                    className="pt-3 border-t space-y-2"
+                    style={{ borderColor: 'var(--divider-color)' }}
+                  >
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span>Largo vertical (fina ↔ larga)</span>
+                      <span className="font-mono-nums" style={{ color: 'var(--text-muted)' }}>
+                        {currentCardHeight}px
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                      {heightPresets.map((preset) => {
+                        const active = currentCardHeight === preset.value;
+                        return (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            onClick={() =>
+                              onChangeSettings({
+                                ...settings,
+                                trackCardHeightPx: preset.value,
+                              })
+                            }
+                            className="btn-raw min-h-[38px] px-2 py-1.5 rounded-xl border text-[11px] font-semibold flex flex-col items-center justify-center transition"
+                            style={{
+                              backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                              borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                            }}
+                          >
+                            <span>{preset.label}</span>
+                            <span
+                              className="text-[10px] font-mono-nums"
+                              style={{ color: 'var(--text-muted)' }}
+                            >
+                              {preset.value}px
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px] font-medium">
+                        <span style={{ color: 'var(--text-muted)' }}>Fina (56px)</span>
+                        <span style={{ color: 'var(--text-muted)' }}>Muy larga (176px)</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={56}
+                        max={176}
+                        step={4}
+                        aria-label="Largo vertical de las tarjetas de canciones"
+                        value={currentCardHeight}
+                        onChange={(e) =>
+                          onChangeSettings({
+                            ...settings,
+                            trackCardHeightPx: Number(e.target.value),
+                          })
+                        }
+                        className="w-full accent-current cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </section>
 
           {/* Background Playback & Over Other Apps */}

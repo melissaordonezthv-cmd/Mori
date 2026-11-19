@@ -375,8 +375,14 @@ export async function extractTrackFromFile(
   return { track: enriched, blob: file };
 }
 
-function encodeMonoWav(samples: Float32Array, sampleRate: number): Blob {
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
+function encodeMonoWav(
+  samples: Float32Array,
+  sampleRate: number,
+  bitDepth: 8 | 16 = 16
+): Blob {
+  const bytesPerSample = bitDepth === 8 ? 1 : 2;
+  const dataLength = samples.length * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataLength);
   const view = new DataView(buffer);
 
   const writeString = (offset: number, str: string) => {
@@ -386,27 +392,47 @@ function encodeMonoWav(samples: Float32Array, sampleRate: number): Blob {
   };
 
   writeString(0, 'RIFF');
-  view.setUint32(4, 36 + samples.length * 2, true);
+  view.setUint32(4, 36 + dataLength, true);
   writeString(8, 'WAVE');
   writeString(12, 'fmt ');
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
   view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, bitDepth, true);
   writeString(36, 'data');
-  view.setUint32(40, samples.length * 2, true);
+  view.setUint32(40, dataLength, true);
 
   let offset = 44;
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-    offset += 2;
+  if (bitDepth === 8) {
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setUint8(offset, Math.round((s * 0.5 + 0.5) * 255));
+      offset += 1;
+    }
+  } else {
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
   }
 
   return new Blob([buffer], { type: 'audio/wav' });
+}
+
+function normalizeGeminiAudioMimeType(rawType: string): string | null {
+  const lower = (rawType || '').toLowerCase().split(';')[0].trim();
+  if (lower === 'audio/mpeg' || lower === 'audio/mp3') return 'audio/mpeg';
+  if (lower === 'audio/wav' || lower === 'audio/x-wav' || lower === 'audio/wave') return 'audio/wav';
+  if (lower === 'audio/ogg') return 'audio/ogg';
+  if (lower === 'audio/flac' || lower === 'audio/x-flac') return 'audio/flac';
+  if (lower === 'audio/aac') return 'audio/aac';
+  if (lower === 'audio/mp4' || lower === 'audio/x-m4a' || lower === 'audio/m4a') return 'audio/mp4';
+  if (lower === 'audio/webm') return 'audio/webm';
+  return null;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -426,18 +452,17 @@ function blobToBase64(blob: Blob): Promise<string> {
 }
 
 /**
- * Downsamples up to 45 seconds of a local lossless/compressed audio blob
- * to a lightweight 16kHz mono WAV (~1.4MB) for rapid Gemini lyrics & mood analysis.
+ * Prepares the full song audio for Gemini AI transcription, pasted-lyrics timestamp alignment,
+ * and complete translation. Sends compressed files <= 10 MB directly, or downsamples the full
+ * track cleanly to a compact mono WAV fitting well within payload limits.
  */
 export async function prepareAudioSnippetForAI(
   blob: Blob
-): Promise<{ base64: string; mimeType: string } | null> {
-  if (
-    blob.size <= 3.5 * 1024 * 1024 &&
-    (blob.type === 'audio/mpeg' || blob.type === 'audio/wav' || blob.type === 'audio/ogg')
-  ) {
+): Promise<{ base64: string; mimeType: string; durationSec?: number } | null> {
+  const normalizedMime = normalizeGeminiAudioMimeType(blob.type);
+  if (blob.size <= 10 * 1024 * 1024 && normalizedMime && normalizedMime !== 'audio/wav') {
     const base64 = await blobToBase64(blob);
-    return { base64, mimeType: blob.type };
+    return { base64, mimeType: normalizedMime };
   }
 
   try {
@@ -449,22 +474,45 @@ export async function prepareAudioSnippetForAI(
     const decoded = await tempCtx.decodeAudioData(arrayBuffer);
     await tempCtx.close();
 
-    const targetRate = 16000;
-    const maxSeconds = Math.min(decoded.duration, 45);
-    const frameCount = Math.max(1, Math.floor(maxSeconds * targetRate));
-    const offline = new OfflineAudioContext(1, frameCount, targetRate);
+    const fullDuration = Math.max(1, decoded.duration);
+    const maxWavBytes = 9.5 * 1024 * 1024;
+    const profiles: Array<{ rate: number; bits: 8 | 16 }> = [
+      { rate: 16000, bits: 16 },
+      { rate: 12000, bits: 16 },
+      { rate: 8000, bits: 16 },
+      { rate: 8000, bits: 8 },
+      { rate: 6000, bits: 8 },
+    ];
+
+    const chosen =
+      profiles.find((p) => fullDuration * p.rate * (p.bits / 8) <= maxWavBytes) ??
+      profiles[profiles.length - 1];
+
+    const maxAllowedSeconds = Math.floor(maxWavBytes / (chosen.rate * (chosen.bits / 8)));
+    const renderDuration = Math.min(fullDuration, maxAllowedSeconds);
+    const frameCount = Math.max(1, Math.floor(renderDuration * chosen.rate));
+
+    const offline = new OfflineAudioContext(1, frameCount, chosen.rate);
     const source = offline.createBufferSource();
     source.buffer = decoded;
     source.connect(offline.destination);
-    source.start(0, 0, maxSeconds);
+    source.start(0, 0, renderDuration);
 
     const rendered = await offline.startRendering();
     const channelData = rendered.getChannelData(0);
-    const wavBlob = encodeMonoWav(channelData, targetRate);
+    const wavBlob = encodeMonoWav(channelData, chosen.rate, chosen.bits);
     const base64 = await blobToBase64(wavBlob);
-    return { base64, mimeType: 'audio/wav' };
+    return {
+      base64,
+      mimeType: 'audio/wav',
+      durationSec: Math.round(fullDuration),
+    };
   } catch (err) {
-    console.warn('Could not resample audio snippet, continuing with metadata:', err);
+    console.warn('Could not resample audio for AI:', err);
+    if (blob.size <= 12 * 1024 * 1024 && normalizedMime) {
+      const base64 = await blobToBase64(blob);
+      return { base64, mimeType: normalizedMime };
+    }
     return null;
   }
 }

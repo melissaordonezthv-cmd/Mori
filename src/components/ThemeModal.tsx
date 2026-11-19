@@ -24,6 +24,8 @@ import {
   SONG_BAR_ANIMATIONS,
   SONG_BAR_OUT_OF_LINE_ANIMATIONS,
   SONG_BAR_SWATCHES,
+  SONG_TITLE_COLOR_PRESETS,
+  SONG_TITLE_SHAPES,
   SURFACE_SWATCHES,
   TEXT_SWATCHES,
   TRACK_CARD_COLOR_PRESETS,
@@ -36,6 +38,7 @@ import { getPlaybackControlPresentation } from '../utils/playbackButtons3D';
 import { getTrackCardPresentation } from '../utils/trackCardStyles';
 import { ImageEditorModal } from './ImageEditorModal';
 import { SongProgressBar } from './SongProgressBar';
+import { SongTitleDisplay } from './SongTitleDisplay';
 
 interface ThemeModalProps {
   open: boolean;
@@ -50,6 +53,7 @@ type SectionKey =
   | 'bg'
   | 'player'
   | 'bar'
+  | 'songTitle'
   | 'banner'
   | 'cards'
   | 'playback3d'
@@ -63,6 +67,8 @@ type SubListKey =
   | 'barOutAnims'
   | 'barAnims'
   | 'barColors'
+  | 'songTitleShapes'
+  | 'songTitleColors'
   | 'cardColors'
   | 'cardStyles'
   | 'pbColors'
@@ -98,6 +104,17 @@ function sliceWithActive<T>(
   };
 }
 
+function isLightHexColor(hexStr?: string): boolean {
+  if (!hexStr) return false;
+  const clean = hexStr.replace('#', '');
+  if (clean.length !== 6) return false;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return false;
+  return (r * 299 + g * 587 + b * 114) / 1000 > 165;
+}
+
 export const ThemeModal: React.FC<ThemeModalProps> = ({
   open,
   theme,
@@ -121,9 +138,9 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   const activeDivider = DIVIDER_SWATCHES.find((d) => d.id === theme.dividerColorId);
   const activeBarColor = SONG_BAR_SWATCHES.find((b) => b.id === (theme.songBarColorId ?? 'auto'));
 
+  const isTextLight = isLightHexColor(activeText?.hex);
   const lowContrastTip =
-    (activeBg?.isDark && theme.textColorId === 'negro') ||
-    (!activeBg?.isDark && theme.textColorId === 'blanco');
+    (activeBg?.isDark && !isTextLight) || (!activeBg?.isDark && isTextLight);
 
   const activeBarAnim = theme.songBarAnimationId ?? 'shimmer_glow';
   const activeBarMeta =
@@ -150,6 +167,13 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   const activePbColorMeta =
     PLAYBACK_BUTTON_COLOR_PRESETS.find((p) => p.id === activePbColor) ??
     PLAYBACK_BUTTON_COLOR_PRESETS[0];
+
+  const activeTitleShape = theme.songTitleShapeId ?? 'cloud_plush';
+  const activeTitleShapeMeta =
+    SONG_TITLE_SHAPES.find((s) => s.id === activeTitleShape) ?? SONG_TITLE_SHAPES[1];
+  const activeTitleColor = theme.songTitleColorId ?? 'auto';
+  const activeTitleColorMeta =
+    SONG_TITLE_COLOR_PRESETS.find((c) => c.id === activeTitleColor) ?? SONG_TITLE_COLOR_PRESETS[0];
 
   const cardPreview = getTrackCardPresentation(activeCardStyle, activeCardDecor, true, true, {
     colorId: activeCardColor,
@@ -342,6 +366,18 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
     6,
     isSubExpanded('textColors'),
     (t) => t.id === theme.textColorId
+  );
+  const songTitleShapeSlice = sliceWithActive(
+    SONG_TITLE_SHAPES,
+    6,
+    isSubExpanded('songTitleShapes'),
+    (s) => s.id === activeTitleShape
+  );
+  const songTitleColorSlice = sliceWithActive(
+    SONG_TITLE_COLOR_PRESETS,
+    6,
+    isSubExpanded('songTitleColors'),
+    (c) => c.id === activeTitleColor
   );
 
   return (
@@ -557,7 +593,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                           {selected && (
                             <Check
                               className="w-3 h-3"
-                              style={{ color: swatch.isDark ? '#FFFFFF' : '#1C1B1F' }}
+                              style={{ color: isLightHexColor(swatch.accent) ? '#1C1B1F' : '#FFFFFF' }}
                             />
                           )}
                         </span>
@@ -753,6 +789,187 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                     })}
                   </div>
                   {renderExpandButton('barColors', SONG_BAR_SWATCHES.length, barColorSlice.hasMore, 'colores')}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 3b. Song Title Shapes & Varied Colors (including Solo el título) */}
+          <section
+            className={isCompactMode ? 'rounded-2xl border overflow-hidden' : 'pt-2'}
+            style={
+              isCompactMode
+                ? { backgroundColor: 'var(--bg-surface)', borderColor: 'var(--divider-color)' }
+                : undefined
+            }
+          >
+            {renderSectionHeader(
+              'songTitle',
+              'Título de la canción (formas y colores)',
+              `${activeTitleShapeMeta.label} · ${activeTitleColorMeta.label}`,
+              <span
+                className="w-7 h-7 rounded-xl border shrink-0 flex items-center justify-center text-xs font-bold"
+                style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  borderColor: 'var(--divider-color)',
+                }}
+              >
+                <Type className="w-3.5 h-3.5" />
+              </span>,
+              `${SONG_TITLE_SHAPES.length} formas`
+            )}
+            {isSectionOpen('songTitle') && (
+              <div
+                className={isCompactMode ? 'px-4 pb-4 pt-3 border-t space-y-4' : 'space-y-4'}
+                style={{ borderColor: 'var(--divider-color)' }}
+              >
+                {/* Live Song Title Preview */}
+                <div
+                  className="p-4 rounded-2xl border space-y-2"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                      Vista previa en tu reproductor
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...theme, songTitleShapeId: 'title_only' })}
+                      className="btn-raw min-h-[30px] px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition"
+                      style={{
+                        backgroundColor:
+                          activeTitleShape === 'title_only'
+                            ? 'var(--accent-color)'
+                            : 'var(--bg-surface)',
+                        borderColor: 'var(--divider-color)',
+                        color:
+                          activeTitleShape === 'title_only' ? '#1C1B1F' : 'var(--text-main)',
+                      }}
+                    >
+                      Solo el título
+                    </button>
+                  </div>
+                  <div className="pt-1">
+                    <SongTitleDisplay
+                      title="Sakura Rain (Hi-Res)"
+                      shapeId={activeTitleShape}
+                      colorId={activeTitleColor}
+                      customBg={theme.songTitleCustomBg}
+                      customText={theme.songTitleCustomText}
+                      compact
+                    />
+                  </div>
+                </div>
+
+                {/* Varied Shapes Grid */}
+                <div>
+                  <p className="text-xs font-semibold mb-2">
+                    Forma del título (elige “Solo el título” si no quieres detalle)
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {songTitleShapeSlice.visible.map((shapeOpt) => {
+                      const selected = activeTitleShape === shapeOpt.id;
+                      return (
+                        <button
+                          key={shapeOpt.id}
+                          type="button"
+                          onClick={() => onChange({ ...theme, songTitleShapeId: shapeOpt.id })}
+                          className="btn-raw min-h-[44px] px-3 py-2 rounded-2xl border text-left transition-all"
+                          style={{
+                            backgroundColor: selected ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                            borderColor: selected ? 'var(--text-main)' : 'var(--divider-color)',
+                          }}
+                        >
+                          <p className="text-xs font-semibold truncate">{shapeOpt.label}</p>
+                          <p
+                            className="text-[10px] truncate mt-0.5"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            {shapeOpt.description}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {renderExpandButton(
+                    'songTitleShapes',
+                    SONG_TITLE_SHAPES.length,
+                    songTitleShapeSlice.hasMore,
+                    'formas'
+                  )}
+                </div>
+
+                {/* Varied Colors Grid */}
+                <div
+                  className="p-3.5 rounded-2xl border space-y-2.5"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  <p className="text-xs font-semibold">Colores del título de la canción</p>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                    {songTitleColorSlice.visible.map((cp) => {
+                      const selected = activeTitleColor === cp.id;
+                      return (
+                        <button
+                          key={cp.id}
+                          type="button"
+                          onClick={() => onChange({ ...theme, songTitleColorId: cp.id })}
+                          className="btn-raw min-h-[38px] px-2 py-1.5 rounded-xl border flex items-center gap-2 text-[11px] font-medium transition"
+                          style={{
+                            backgroundColor: selected ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                            borderColor: selected ? 'var(--text-main)' : 'var(--divider-color)',
+                          }}
+                        >
+                          <span
+                            className="w-4 h-4 rounded-full border shrink-0"
+                            style={{
+                              background: cp.preview,
+                              borderColor: 'rgba(128,128,128,0.35)',
+                            }}
+                          />
+                          <span className="truncate">{cp.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {renderExpandButton(
+                    'songTitleColors',
+                    SONG_TITLE_COLOR_PRESETS.length,
+                    songTitleColorSlice.hasMore,
+                    'colores'
+                  )}
+
+                  {activeTitleColor === 'custom' && (
+                    <div className="pt-2 flex flex-wrap items-center gap-4 text-xs">
+                      <label className="flex items-center gap-2 font-medium">
+                        <span>Fondo:</span>
+                        <input
+                          type="color"
+                          value={theme.songTitleCustomBg || '#FFF2F6'}
+                          onChange={(e) =>
+                            onChange({ ...theme, songTitleCustomBg: e.target.value })
+                          }
+                          className="w-8 h-8 rounded-lg border cursor-pointer"
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 font-medium">
+                        <span>Letra:</span>
+                        <input
+                          type="color"
+                          value={theme.songTitleCustomText || '#1C1B1F'}
+                          onChange={(e) =>
+                            onChange({ ...theme, songTitleCustomText: e.target.value })
+                          }
+                          className="w-8 h-8 rounded-lg border cursor-pointer"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -974,31 +1191,43 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                     }}
                   >
                     {cardPreview.topAccentElement}
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex items-center gap-3 min-w-0 w-full">
                       <img
                         src={DEFAULT_COVER_SAKURA}
                         alt="Vista previa"
                         className={`${cardPreview.coverClassName} object-cover shrink-0 border`}
                         style={{ borderColor: 'var(--divider-color)' }}
                       />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold truncate flex items-center gap-1.5">
-                          {cardPreview.decorBadge && (
-                            <span aria-hidden="true">{cardPreview.decorBadge}</span>
-                          )}
-                          <span className="truncate">Sakura Rain (Hi-Res)</span>
-                        </p>
-                        <p
-                          className="text-xs truncate font-mono-nums mt-0.5"
-                          style={{ color: cardPreview.mutedColorOverride || 'var(--text-muted)' }}
-                        >
-                          MoriNote · FLAC Sin pérdida · 24b/96kHz · 3:42
-                        </p>
+                      <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                        {cardPreview.decorBadge && (
+                          <span aria-hidden="true" className="shrink-0 text-xs">
+                            {cardPreview.decorBadge}
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <SongTitleDisplay
+                            title="Sakura Rain (Hi-Res)"
+                            shapeId={activeTitleShape}
+                            colorId={activeTitleColor}
+                            customBg={theme.songTitleCustomBg}
+                            customText={theme.songTitleCustomText}
+                            size="row"
+                            fallbackTextColor={cardPreview.textColorOverride}
+                          />
+                        </div>
                       </div>
                     </div>
-                    <span className="text-sm opacity-75 shrink-0" aria-hidden="true">
-                      ♥
-                    </span>
+                    <div className="flex items-center justify-between gap-2 pl-0 sm:pl-[60px]">
+                      <p
+                        className="text-xs truncate font-mono-nums"
+                        style={{ color: cardPreview.mutedColorOverride || 'var(--text-muted)' }}
+                      >
+                        MoriNote · FLAC Sin pérdida · 24b/96kHz · 3:42
+                      </p>
+                      <span className="text-sm opacity-75 shrink-0" aria-hidden="true">
+                        ♥
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -1581,12 +1810,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                 style={{
                   backgroundColor: activeText?.hex ?? '#1C1B1F',
                   borderColor: 'rgba(128,128,128,0.35)',
-                  color:
-                    theme.textColorId === 'blanco' ||
-                    theme.textColorId === 'crema' ||
-                    theme.textColorId === 'amarillo'
-                      ? '#1C1B1F'
-                      : '#FFFFFF',
+                  color: isLightHexColor(activeText?.hex) ? '#1C1B1F' : '#FFFFFF',
                 }}
               >
                 A
@@ -1598,8 +1822,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
                   {textSlice.visible.map((txt) => {
                     const selected = theme.textColorId === txt.id;
-                    const isLightTextSwatch =
-                      txt.id === 'blanco' || txt.id === 'crema' || txt.id === 'amarillo';
+                    const isLightTextSwatch = isLightHexColor(txt.hex);
                     return (
                       <button
                         key={txt.id}

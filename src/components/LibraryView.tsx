@@ -21,12 +21,15 @@ import type { Translations } from '../constants/i18n';
 import type {
   AudioTrack,
   Playlist,
+  SongTitleColorId,
+  SongTitleShapeId,
   TrackCardColorId,
   TrackCardDecorId,
   TrackCardStyleId,
 } from '../types/music';
 import { collectAudioFilesFromDirectory, formatDuration } from '../utils/audioMetadata';
 import { getTrackCardPresentation } from '../utils/trackCardStyles';
+import { SongTitleDisplay } from './SongTitleDisplay';
 
 export type LibraryTab = 'all' | 'lossless' | 'favorites' | 'playlists';
 
@@ -45,6 +48,12 @@ interface LibraryViewProps {
   trackCardCustomBg?: string;
   trackCardCustomText?: string;
   trackCardDecorId?: TrackCardDecorId;
+  songTitleShapeId?: SongTitleShapeId;
+  songTitleColorId?: SongTitleColorId;
+  songTitleCustomBg?: string;
+  songTitleCustomText?: string;
+  trackCardWidthPercent?: number;
+  trackCardHeightPx?: number;
   t: Translations;
   onImportFiles: (files: FileList | File[]) => void;
   onSaveDirHandle?: (handle: FileSystemDirectoryHandle) => void;
@@ -77,6 +86,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   trackCardCustomBg,
   trackCardCustomText,
   trackCardDecorId = 'auto',
+  songTitleShapeId = 'cloud_plush',
+  songTitleColorId = 'auto',
+  songTitleCustomBg,
+  songTitleCustomText,
+  trackCardWidthPercent = 78,
+  trackCardHeightPx = 118,
   t,
   onImportFiles,
   onSaveDirHandle,
@@ -743,20 +758,28 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   )}
                 </div>
               ) : (
+                (() => {
+                  const safeCardWidth = Math.min(100, Math.max(58, trackCardWidthPercent));
+                  const safeCardHeight = Math.min(176, Math.max(56, trackCardHeightPx));
+                  const isVerySlimHeight = safeCardHeight <= 76;
+                  const isTallCard = safeCardHeight >= 112;
+                  return (
                 <div
                   className={
                     isGroupedListStyle
-                      ? 'rounded-3xl border overflow-hidden'
-                      : 'space-y-2.5 pt-2.5 px-1'
+                      ? 'rounded-3xl border overflow-hidden mx-auto transition-[width] duration-200'
+                      : 'space-y-2.5 pt-2.5 px-1 mx-auto transition-[width] duration-200'
                   }
-                  style={
-                    isGroupedListStyle
+                  style={{
+                    ...(isGroupedListStyle
                       ? {
                           backgroundColor: 'var(--bg-elevated)',
                           borderColor: 'var(--divider-color)',
                         }
-                      : undefined
-                  }
+                      : {}),
+                    width: `${safeCardWidth}%`,
+                    maxWidth: '500px',
+                  }}
                 >
                   {filteredTracks.map((track, idx) => {
                     const isCurrent = track.id === currentTrackId;
@@ -776,21 +799,34 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     return (
                       <div
                         key={track.id}
-                        style={pres.containerStyle}
+                        style={{
+                          ...pres.containerStyle,
+                          minHeight: `${safeCardHeight}px`,
+                          justifyContent: 'space-between',
+                          ...(isVerySlimHeight
+                            ? { paddingTop: '0.45rem', paddingBottom: '0.45rem' }
+                            : isTallCard
+                              ? { paddingTop: '0.9rem', paddingBottom: '0.9rem' }
+                              : {}),
+                        }}
                         className={pres.containerClassName}
                       >
                         {pres.topAccentElement}
 
-                        {/* Playable Track Row Left */}
+                        {/* Full-Width Playable Header: Cover + Complete Song Title */}
                         <button
                           type="button"
                           onClick={() =>
                             isCurrent ? onTogglePlay() : onPlayTrack(track.id, queueSlice)
                           }
-                          className="btn-raw flex items-center gap-3 min-w-0 flex-1 text-left"
+                          className="btn-raw flex items-center gap-2.5 sm:gap-3 w-full min-w-0 text-left"
                         >
                           <div
-                            className={`relative overflow-hidden shrink-0 border ${pres.coverClassName}`}
+                            className={`relative overflow-hidden shrink-0 border ${
+                              isVerySlimHeight
+                                ? 'w-9 h-9 rounded-lg'
+                                : pres.coverClassName
+                            }`}
                             style={{ borderColor: 'var(--divider-color)' }}
                           >
                             <img
@@ -810,21 +846,44 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                             )}
                           </div>
 
-                          <div className="min-w-0 flex-1">
+                          <div
+                            className="min-w-0 flex-1 flex items-center gap-1.5"
+                            style={{ color: pres.textColorOverride || 'inherit' }}
+                          >
+                            {pres.decorBadge && (
+                              <span aria-hidden="true" className="shrink-0 text-xs">
+                                {pres.decorBadge}
+                              </span>
+                            )}
+                            <div className="min-w-0 flex-1 overflow-x-clip">
+                              <SongTitleDisplay
+                                title={track.title}
+                                shapeId={songTitleShapeId}
+                                colorId={songTitleColorId}
+                                customBg={songTitleCustomBg}
+                                customText={songTitleCustomText}
+                                size="row"
+                                fallbackTextColor={pres.textColorOverride}
+                              />
+                            </div>
+                          </div>
+                        </button>
+
+                        {/* Compact Sub-row: Artist/Format Metadata + Row Actions */}
+                        <div
+                          className={`flex items-center justify-between gap-1.5 pl-0 sm:pl-[56px] ${
+                            safeCardWidth <= 68 ? 'flex-wrap' : ''
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              isCurrent ? onTogglePlay() : onPlayTrack(track.id, queueSlice)
+                            }
+                            className="btn-raw min-w-0 flex-1 text-left"
+                          >
                             <p
-                              className="text-sm font-semibold truncate flex items-center gap-1"
-                              style={{ color: pres.textColorOverride || 'inherit' }}
-                            >
-                              {pres.decorBadge && (
-                                <span aria-hidden="true" className="shrink-0 text-xs">
-                                  {pres.decorBadge}
-                                </span>
-                              )}
-                              <span className="truncate">{track.title}</span>
-                            </p>
-                            {/* Zero-pill clean typographic metadata */}
-                            <p
-                              className="text-xs truncate mt-0.5 font-mono-nums"
+                              className="text-xs truncate font-mono-nums"
                               style={{ color: pres.mutedColorOverride || 'var(--text-muted)' }}
                             >
                               {track.artist}
@@ -837,19 +896,26 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                               {' · '}
                               {formatDuration(track.duration)}
                             </p>
-                          </div>
-                        </button>
+                            {isTallCard && track.album && track.album !== track.title && (
+                              <p
+                                className="text-[11px] truncate opacity-80 mt-0.5"
+                                style={{ color: pres.mutedColorOverride || 'var(--text-muted)' }}
+                              >
+                                {track.album}
+                              </p>
+                            )}
+                          </button>
 
-                        {/* Row Actions */}
-                        <div
-                          className="flex items-center gap-0.5 shrink-0"
-                          style={{ color: pres.textColorOverride || 'inherit' }}
-                        >
+                          {/* Row Actions */}
+                          <div
+                            className="flex items-center gap-0.5 shrink-0"
+                            style={{ color: pres.textColorOverride || 'inherit' }}
+                          >
                           <button
                             type="button"
                             onClick={() => onToggleFavorite(track.id)}
                             aria-label="Favorita"
-                            className="btn-raw min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center hover:opacity-80"
+                            className="btn-raw min-w-[30px] min-h-[30px] sm:min-w-[36px] sm:min-h-[36px] rounded-xl flex items-center justify-center hover:opacity-80"
                           >
                             <Heart
                               className="w-4 h-4"
@@ -867,7 +933,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                               }
                               aria-label={t.addToPlaylist}
                               title={t.addToPlaylist}
-                              className="btn-raw min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center hover:opacity-80"
+                              className="btn-raw min-w-[30px] min-h-[30px] sm:min-w-[36px] sm:min-h-[36px] rounded-xl flex items-center justify-center hover:opacity-80"
                             >
                               <ListPlus className="w-4 h-4" />
                             </button>
@@ -923,7 +989,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                             onClick={() => onEditTrack(track)}
                             aria-label={t.editTrack}
                             title={t.editTrack}
-                            className="btn-raw min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center hover:opacity-80"
+                            className="btn-raw min-w-[30px] min-h-[30px] sm:min-w-[36px] sm:min-h-[36px] rounded-xl flex items-center justify-center hover:opacity-80"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
@@ -936,7 +1002,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                               }
                               aria-label="Quitar de la lista"
                               title="Quitar de la lista"
-                              className="btn-raw min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center opacity-70 hover:opacity-100"
+                              className="btn-raw min-w-[30px] min-h-[30px] sm:min-w-[36px] sm:min-h-[36px] rounded-xl flex items-center justify-center opacity-70 hover:opacity-100"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -946,16 +1012,19 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                               onClick={() => onDeleteTrack(track.id)}
                               aria-label={t.delete}
                               title={t.delete}
-                              className="btn-raw min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center opacity-70 hover:opacity-100"
+                              className="btn-raw min-w-[30px] min-h-[30px] sm:min-w-[36px] sm:min-h-[36px] rounded-xl flex items-center justify-center opacity-70 hover:opacity-100"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
+                          </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                  );
+                })()
               )}
             </>
           )}

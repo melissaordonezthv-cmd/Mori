@@ -37,8 +37,10 @@ import { formatDuration } from '../utils/audioMetadata';
 import { getPlaybackControlPresentation } from '../utils/playbackButtons3D';
 import { AudioVisualizer } from './AudioVisualizer';
 import { ImageEditorModal } from './ImageEditorModal';
+import { MusicCardOuterIcon } from './MusicCardOuterIcon';
 import { NowPlayingVisualStage } from './NowPlayingVisualStage';
 import { SongProgressBar } from './SongProgressBar';
+import { SongTitleDisplay } from './SongTitleDisplay';
 
 interface NowPlayingPanelProps {
   track: AudioTrack | null;
@@ -138,6 +140,8 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
     trackId: string;
   } | null>(null);
   const quickCoverInputRef = useRef<HTMLInputElement | null>(null);
+  const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
+  const activeLyricBtnRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     return () => {
@@ -174,6 +178,19 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
     return idx;
   }, [track?.lyrics?.lines, currentTime]);
 
+  useEffect(() => {
+    if (!isPlaying || activeTab !== 'lyrics' || activeLineIndex < 0) return;
+    const container = lyricsContainerRef.current;
+    const item = activeLyricBtnRef.current;
+    if (!container || !item) return;
+    const targetTop =
+      item.offsetTop - container.offsetTop - container.clientHeight / 2 + item.clientHeight / 2;
+    container.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: 'smooth',
+    });
+  }, [activeLineIndex, activeTab, isPlaying]);
+
   const queueTracks = useMemo(() => {
     const map = new Map(tracks.map((tr) => [tr.id, tr]));
     return queueIds.map((id) => map.get(id)).filter((tr): tr is AudioTrack => Boolean(tr));
@@ -187,69 +204,73 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
     e.target.value = '';
   };
 
+  const outerIconId = settings.musicCardOuterIcon ?? 'note_sparkle';
+  const hasOuterIcon = outerIconId !== 'none';
+
   if (!track) {
     return (
-      <div
-        className="rounded-3xl border p-8 flex flex-col items-center justify-center text-center min-h-[420px]"
-        style={{
-          backgroundColor: 'var(--bg-elevated)',
-          borderColor: 'var(--divider-color)',
-        }}
-      >
+      <div className={`relative ${hasOuterIcon ? 'pt-4' : ''}`}>
+        <MusicCardOuterIcon
+          iconId={outerIconId}
+          color={settings.musicCardOuterIconColor}
+        />
         <div
-          className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
-          style={{ backgroundColor: 'var(--accent-soft)' }}
+          className="rounded-3xl border p-8 flex flex-col items-center justify-center text-center min-h-[420px]"
+          style={{
+            backgroundColor: 'var(--bg-elevated)',
+            borderColor: 'var(--divider-color)',
+          }}
         >
-          <Disc3 className="w-10 h-10 opacity-75" />
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
+            style={{ backgroundColor: 'var(--accent-soft)' }}
+          >
+            <Disc3 className="w-10 h-10 opacity-75" />
+          </div>
+          <h3 className="text-lg font-bold tracking-tight">{t.nowPlaying}</h3>
+          <p className="text-sm mt-1 max-w-xs" style={{ color: 'var(--text-muted)' }}>
+            Elige una canción de tu biblioteca o importa tus archivos sin pérdida para comenzar.
+          </p>
         </div>
-        <h3 className="text-lg font-bold tracking-tight">{t.nowPlaying}</h3>
-        <p className="text-sm mt-1 max-w-xs" style={{ color: 'var(--text-muted)' }}>
-          Elige una canción de tu biblioteca o importa tus archivos sin pérdida para comenzar.
-        </p>
       </div>
     );
   }
 
   return (
-    <div
-      className="rounded-3xl border overflow-hidden relative transition-all duration-700"
-      style={{
-        backgroundColor: 'var(--bg-elevated)',
-        borderColor:
-          moodSyncEnabled && track.lyrics?.suggestedAura
-            ? track.lyrics.suggestedAura
-            : 'var(--divider-color)',
-        backgroundImage:
-          moodSyncEnabled && moodMeta
-            ? `radial-gradient(circle at 20% 0%, ${moodMeta.aura1}, transparent 60%), radial-gradient(circle at 90% 25%, ${moodMeta.aura2}, transparent 54%)`
-            : undefined,
-      }}
-    >
-      <div className={compactSplit ? 'p-4 space-y-3.5' : 'p-5 sm:p-6 space-y-5'}>
-        {/* Top Track Header & Actions */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-medium font-mono-nums truncate" style={{ color: 'var(--text-muted)' }}>
-              {track.format}
-              {track.lossless ? ' · Sin pérdida' : ''}
-              {track.bitDepth && track.sampleRate
-                ? ` · ${track.bitDepth}-bit/${Math.round(track.sampleRate / 1000)}kHz`
-                : ''}
-              {track.year ? ` · ${track.year}` : ''}
-              {track.genre ? ` · ${track.genre}` : ''}
-            </p>
-            <h2 className="text-xl font-bold tracking-tight truncate mt-0.5">{track.title}</h2>
-            <p className="text-sm truncate" style={{ color: 'var(--text-muted)' }}>
-              {track.artist} · {track.album}
-            </p>
-            {track.notes && (
-              <p className="text-xs italic truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                “{track.notes}”
+    <div className={`relative ${hasOuterIcon ? 'pt-4' : ''}`}>
+      <MusicCardOuterIcon
+        iconId={outerIconId}
+        color={settings.musicCardOuterIconColor}
+      />
+      <div
+        className="rounded-3xl border overflow-hidden relative transition-all duration-700"
+        style={{
+          backgroundColor: 'var(--bg-elevated)',
+          borderColor:
+            moodSyncEnabled && track.lyrics?.suggestedAura
+              ? track.lyrics.suggestedAura
+              : 'var(--divider-color)',
+          backgroundImage:
+            moodSyncEnabled && moodMeta
+              ? `radial-gradient(circle at 20% 0%, ${moodMeta.aura1}, transparent 60%), radial-gradient(circle at 90% 25%, ${moodMeta.aura2}, transparent 54%)`
+              : undefined,
+        }}
+      >
+        <div className={compactSplit ? 'p-4 space-y-3.5' : 'p-5 sm:p-6 space-y-5'}>
+          {/* Top Utility Row: Format Metadata + Quick Actions */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium font-mono-nums truncate min-w-0" style={{ color: 'var(--text-muted)' }}>
+                {track.format}
+                {track.lossless ? ' · Sin pérdida' : ''}
+                {track.bitDepth && track.sampleRate
+                  ? ` · ${track.bitDepth}-bit/${Math.round(track.sampleRate / 1000)}kHz`
+                  : ''}
+                {track.year ? ` · ${track.year}` : ''}
+                {track.genre ? ` · ${track.genre}` : ''}
               </p>
-            )}
-          </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => onToggleFavorite(track.id)}
@@ -304,6 +325,27 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
               <PictureInPicture2 className="w-4 h-4" />
             </button>
           </div>
+            </div>
+
+            {/* Full-Width Customizable Song Title Shape & Colors */}
+            <div className="space-y-1">
+              <SongTitleDisplay
+                title={track.title}
+                shapeId={theme?.songTitleShapeId ?? 'cloud_plush'}
+                colorId={theme?.songTitleColorId ?? 'auto'}
+                customBg={theme?.songTitleCustomBg}
+                customText={theme?.songTitleCustomText}
+                compact={compactSplit}
+              />
+              <p className="text-sm truncate pt-0.5" style={{ color: 'var(--text-muted)' }}>
+                {track.artist} · {track.album}
+              </p>
+              {track.notes && (
+                <p className="text-xs italic truncate" style={{ color: 'var(--text-muted)' }}>
+                  “{track.notes}”
+                </p>
+              )}
+            </div>
         </div>
 
         {/* Customizable Visual Stage (Cover / Vinyl / CD / Cassette / Equalizer / etc.) */}
@@ -599,15 +641,15 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
               >
                 {manualLyricsOpen
                   ? 'Ocultar entrada manual'
-                  : '¿Tienes la letra? Pégala para detectar idioma y traducir al instante'}
+                  : '¿Tienes la letra? Pégala para sincronizarla con la canción y traducirla'}
               </button>
               {manualLyricsOpen && (
                 <div className="mt-2 space-y-2">
                   <textarea
-                    rows={3}
+                    rows={5}
                     value={manualLyricsInput}
                     onChange={(e) => setManualLyricsInput(e.target.value)}
-                    placeholder="Pega aquí la letra original en cualquier idioma…"
+                    placeholder="Pega aquí la letra completa en su idioma original (con o sin marcas [mm:ss]). La IA escuchará la canción para sincronizar cada verso y traducirla completa…"
                     className="w-full p-3 rounded-xl border text-xs focus:outline-none"
                     style={{
                       backgroundColor: 'var(--bg-surface)',
@@ -615,28 +657,45 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
                       color: 'var(--text-main)',
                     }}
                   />
-                  <button
-                    type="button"
-                    disabled={isAnalyzingLyrics || !manualLyricsInput.trim()}
-                    onClick={() => {
-                      onDetectLyrics(track, manualLyricsInput.trim());
-                      setManualLyricsOpen(false);
-                    }}
-                    className="min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-semibold disabled:opacity-50"
-                    style={{
-                      backgroundColor: 'var(--accent-color)',
-                      color: '#1C1B1F',
-                    }}
-                  >
-                    Traducir con IA ahora
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isAnalyzingLyrics || !manualLyricsInput.trim()}
+                      onClick={() => {
+                        onDetectLyrics(track, manualLyricsInput.trim());
+                        setManualLyricsOpen(false);
+                      }}
+                      className="min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
+                      style={{
+                        backgroundColor: 'var(--accent-color)',
+                        color: '#1C1B1F',
+                      }}
+                    >
+                      {isAnalyzingLyrics ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                      <span>
+                        {isAnalyzingLyrics
+                          ? 'Sincronizando y traduciendo…'
+                          : 'Sincronizar con el audio y traducir'}
+                      </span>
+                    </button>
+                    {manualLyricsInput.trim() && (
+                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        {manualLyricsInput.split(/\r?\n/).filter((l) => l.trim()).length} líneas listas
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Lyrics Display */}
             <div
-              className="max-h-60 overflow-y-auto rounded-2xl border p-4 space-y-3"
+              ref={lyricsContainerRef}
+              className="max-h-60 overflow-y-auto rounded-2xl border p-4 space-y-2.5 relative"
               style={{
                 backgroundColor: 'var(--bg-surface)',
                 borderColor: 'var(--divider-color)',
@@ -648,31 +707,40 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
                   return (
                     <button
                       key={`${line.timeSec}-${i}`}
+                      ref={isActive ? activeLyricBtnRef : undefined}
                       type="button"
                       onClick={() => onSeek(line.timeSec)}
-                      className="w-full text-left rounded-xl px-2.5 py-1.5 transition-all block"
+                      className="w-full text-left rounded-xl px-2.5 py-1.5 transition-all flex items-start gap-2.5"
                       style={{
                         backgroundColor: isActive ? 'var(--accent-soft)' : 'transparent',
-                        opacity: isActive ? 1 : 0.72,
+                        opacity: isActive ? 1 : 0.74,
                       }}
                     >
-                      {showOriginalLyrics && (
-                        <p className="text-sm font-semibold leading-snug">{line.original}</p>
-                      )}
-                      <p
-                        className="text-xs mt-0.5 leading-snug"
-                        style={{
-                          color: showOriginalLyrics ? 'var(--text-muted)' : 'var(--text-main)',
-                        }}
+                      <span
+                        className="text-[10px] font-mono-nums pt-0.5 shrink-0 opacity-70"
+                        style={{ color: 'var(--text-muted)' }}
                       >
-                        {line.translated}
-                      </p>
+                        {formatDuration(line.timeSec)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {showOriginalLyrics && (
+                          <p className="text-sm font-semibold leading-snug">{line.original}</p>
+                        )}
+                        <p
+                          className="text-xs mt-0.5 leading-snug"
+                          style={{
+                            color: showOriginalLyrics ? 'var(--text-muted)' : 'var(--text-main)',
+                          }}
+                        >
+                          {line.translated}
+                        </p>
+                      </div>
                     </button>
                   );
                 })
               ) : (
                 <p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>
-                  Pulsa “{t.detectLyricsAI}” para que la IA escuche el audio, detecte el idioma, sincronice el ánimo y traduzca automáticamente al idioma elegido.
+                  Pulsa “{t.detectLyricsAI}” para que la IA escuche la canción completa, detecte la letra y la traduzca, o pega la letra arriba para sincronizarla con el audio.
                 </p>
               )}
             </div>
@@ -827,6 +895,7 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
           closePendingQuickCover();
         }}
       />
+      </div>
     </div>
   );
 };

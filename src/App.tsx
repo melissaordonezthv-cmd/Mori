@@ -16,6 +16,10 @@ import { SoundEffectsModal } from './components/SoundEffectsModal';
 import { ThemeIntroOverlay } from './components/ThemeIntroOverlay';
 import { ThemeModal } from './components/ThemeModal';
 import { TrackEditModal } from './components/TrackEditModal';
+import {
+  BackgroundWallpaperLayer,
+  ScreenOverlayFilterLayer,
+} from './components/WallpaperAndFiltersLayer';
 import { UI_TEXT } from './constants/i18n';
 import {
   DEFAULT_AVATAR_URL,
@@ -23,6 +27,7 @@ import {
   DIVIDER_SWATCHES,
   EQ_PRESETS,
   MOOD_AURAS,
+  SCREEN_OVERLAY_FILTER_OPTIONS,
   SONG_BAR_SWATCHES,
   SURFACE_SWATCHES,
   TEXT_SWATCHES,
@@ -94,6 +99,10 @@ const DEFAULT_THEME: ThemeConfig = {
   textColorId: 'negro',
   songBarColorId: 'auto',
   songBarAnimationId: 'shimmer_glow',
+  songTitleShapeId: 'cloud_plush',
+  songTitleColorId: 'auto',
+  songTitleCustomBg: '',
+  songTitleCustomText: '',
   trackCardStyleId: 'classic_row',
   trackCardDecorId: 'auto',
   trackCardColorId: 'auto',
@@ -146,8 +155,18 @@ const DEFAULT_SETTINGS: AppSettings = {
   nowPlayingAccentColor: '#E5C185',
   nowPlayingDetailColor: '#2E2A36',
   nowPlayingHideCover: false,
+  musicCardOuterIcon: 'note_sparkle',
+  musicCardOuterIconColor: 'auto',
   settingsTextColorId: 'auto',
   settingsTextCustomHex: '',
+  trackCardWidthPercent: 78,
+  trackCardHeightPx: 118,
+  wallpaperUrl: '',
+  wallpaperOpacity: 85,
+  wallpaperFilter: 'none',
+  wallpaperMotion: 'none',
+  screenOverlayFilter: 'none',
+  screenOverlayIntensity: 65,
 };
 
 function readStored<T>(key: string, fallback: T): T {
@@ -157,6 +176,14 @@ function readStored<T>(key: string, fallback: T): T {
     return { ...fallback, ...JSON.parse(raw) };
   } catch {
     return fallback;
+  }
+}
+
+function writeStored(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.warn(`Could not persist ${key} to localStorage:`, err);
   }
 }
 
@@ -296,23 +323,23 @@ export default function App() {
   }, [theme.songBarColorId, playerSwatch.accent]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_THEME_KEY, JSON.stringify(theme));
+    writeStored(STORAGE_THEME_KEY, theme);
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile));
+    writeStored(STORAGE_PROFILE_KEY, profile);
   }, [profile]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_SETTINGS_KEY, JSON.stringify(settings));
+    writeStored(STORAGE_SETTINGS_KEY, settings);
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_LOCK_KEY, JSON.stringify(lockConfig));
+    writeStored(STORAGE_LOCK_KEY, lockConfig);
   }, [lockConfig]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_SOUND_KEY, JSON.stringify(soundConfig));
+    writeStored(STORAGE_SOUND_KEY, soundConfig);
   }, [soundConfig]);
 
   // Global zero-latency tactile ASMR sounds for buttons and optional text typing
@@ -813,12 +840,10 @@ export default function App() {
       setIsAnalyzingLyrics(true);
       setAiError(null);
       try {
-      let audioSnippet: { base64: string; mimeType: string } | null = null;
-      if (!manualText) {
-        const blob = await getTrackBlob(track.id);
-        if (blob) {
-          audioSnippet = await prepareAudioSnippetForAI(blob);
-        }
+      let audioSnippet: { base64: string; mimeType: string; durationSec?: number } | null = null;
+      const blob = await getTrackBlob(track.id);
+      if (blob) {
+        audioSnippet = await prepareAudioSnippetForAI(blob);
       }
 
       const res = await fetch('/api/ai/analyze-lyrics', {
@@ -828,7 +853,7 @@ export default function App() {
           title: track.title,
           artist: track.artist,
           album: track.album,
-          duration: track.duration || 180,
+          duration: track.duration || audioSnippet?.durationSec || 180,
           targetLanguage: settings.language,
           audioBase64: audioSnippet?.base64,
           mimeType: audioSnippet?.mimeType,
@@ -959,10 +984,29 @@ export default function App() {
       nowPlayingAccentColor: DEFAULT_SETTINGS.nowPlayingAccentColor,
       nowPlayingDetailColor: DEFAULT_SETTINGS.nowPlayingDetailColor,
       nowPlayingHideCover: DEFAULT_SETTINGS.nowPlayingHideCover,
+      musicCardOuterIcon: DEFAULT_SETTINGS.musicCardOuterIcon,
+      musicCardOuterIconColor: DEFAULT_SETTINGS.musicCardOuterIconColor,
       settingsTextColorId: DEFAULT_SETTINGS.settingsTextColorId,
       settingsTextCustomHex: DEFAULT_SETTINGS.settingsTextCustomHex,
+      trackCardWidthPercent: DEFAULT_SETTINGS.trackCardWidthPercent,
+      trackCardHeightPx: DEFAULT_SETTINGS.trackCardHeightPx,
+      wallpaperUrl: DEFAULT_SETTINGS.wallpaperUrl,
+      wallpaperOpacity: DEFAULT_SETTINGS.wallpaperOpacity,
+      wallpaperFilter: DEFAULT_SETTINGS.wallpaperFilter,
+      wallpaperMotion: DEFAULT_SETTINGS.wallpaperMotion,
+      screenOverlayFilter: DEFAULT_SETTINGS.screenOverlayFilter,
+      screenOverlayIntensity: DEFAULT_SETTINGS.screenOverlayIntensity,
     }));
   }, []);
+
+  const handleApplyStyleCode = useCallback(
+    (nextTheme: ThemeConfig, nextProfile: ProfileConfig, nextSettings: AppSettings) => {
+      setTheme(nextTheme);
+      setProfile(nextProfile);
+      setSettings(nextSettings);
+    },
+    []
+  );
 
   const stats = useMemo(
     () => ({
@@ -974,23 +1018,41 @@ export default function App() {
     [tracks, playlists]
   );
 
+  const hasAmbientBackground =
+    Boolean(settings.wallpaperUrl) || (settings.wallpaperMotion ?? 'none') !== 'none';
+
   return (
     <div
       data-btn-theme={theme.buttonThemeId ?? 'soft_pill'}
       data-btn-custom={theme.buttonCustomBg ? 'true' : undefined}
-      className="h-dvh overflow-hidden flex flex-col transition-colors duration-300"
+      className="relative h-dvh overflow-hidden flex flex-col transition-colors duration-300"
       style={
         {
           backgroundColor: 'var(--bg-app)',
           color: 'var(--text-main)',
-          backgroundImage: theme.moodSyncEnabled
-            ? 'radial-gradient(circle at 12% 8%, var(--mood-aura-1), transparent 45%), radial-gradient(circle at 88% 12%, var(--mood-aura-2), transparent 42%)'
-            : undefined,
+          backgroundImage:
+            !settings.wallpaperUrl && theme.moodSyncEnabled
+              ? 'radial-gradient(circle at 12% 8%, var(--mood-aura-1), transparent 45%), radial-gradient(circle at 88% 12%, var(--mood-aura-2), transparent 42%)'
+              : undefined,
           '--btn-custom-bg': theme.buttonCustomBg || undefined,
           '--btn-custom-text': theme.buttonCustomText || '#1C1B1F',
         } as React.CSSProperties
       }
     >
+      {/* Background Wallpaper + Nature/Chains Motion Layer Behind All Accessories */}
+      <BackgroundWallpaperLayer
+        wallpaperUrl={settings.wallpaperUrl}
+        opacity={settings.wallpaperOpacity ?? 85}
+        filterId={settings.wallpaperFilter ?? 'none'}
+        motionId={settings.wallpaperMotion ?? 'none'}
+      />
+
+      {/* Full-Screen Optional Screen Overlay Filter (Plastic Bag, Rainy Window, etc.) */}
+      <ScreenOverlayFilterLayer
+        filterId={settings.screenOverlayFilter ?? 'none'}
+        intensity={settings.screenOverlayIntensity ?? 65}
+      />
+
       <EmojiLockScreen
         open={isLocked}
         expectedEmojis={lockConfig.emojis}
@@ -1020,9 +1082,11 @@ export default function App() {
       />
       {/* Top Bar: 3-line corner hamburger menu + Brand wordmark + Profile/Share */}
       <header
-        className="shrink-0 z-30 border-b backdrop-blur-md"
+        className="relative shrink-0 z-30 border-b backdrop-blur-md"
         style={{
-          backgroundColor: 'var(--bg-app)',
+          backgroundColor: hasAmbientBackground
+            ? 'color-mix(in srgb, var(--bg-app) 76%, transparent)'
+            : 'var(--bg-app)',
           borderColor: 'var(--divider-color)',
         }}
       >
@@ -1104,10 +1168,10 @@ export default function App() {
       <main
         className={
           isSplitLayout
-            ? `flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-6 ${
+            ? `relative z-10 flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-6 ${
                 isCompactSplit ? 'pt-3' : 'pt-4'
               } grid grid-cols-[minmax(0,1.06fr)_minmax(0,0.94fr)] gap-3 sm:gap-5 overflow-hidden items-stretch`
-            : 'flex-1 min-h-0 w-full max-w-3xl mx-auto px-3 sm:px-6 pt-3 pb-[76px] flex flex-col overflow-hidden'
+            : 'relative z-10 flex-1 min-h-0 w-full max-w-3xl mx-auto px-3 sm:px-6 pt-3 pb-[76px] flex flex-col overflow-hidden'
         }
       >
         <div
@@ -1133,6 +1197,12 @@ export default function App() {
             trackCardColorId={theme.trackCardColorId ?? 'auto'}
             trackCardCustomBg={theme.trackCardCustomBg}
             trackCardCustomText={theme.trackCardCustomText}
+            songTitleShapeId={theme.songTitleShapeId ?? 'cloud_plush'}
+            songTitleColorId={theme.songTitleColorId ?? 'auto'}
+            songTitleCustomBg={theme.songTitleCustomBg}
+            songTitleCustomText={theme.songTitleCustomText}
+            trackCardWidthPercent={settings.trackCardWidthPercent ?? 78}
+            trackCardHeightPx={settings.trackCardHeightPx ?? 118}
             t={t}
             onImportFiles={handleImportFiles}
             onSaveDirHandle={handleSaveDirectoryHandle}
@@ -1371,6 +1441,8 @@ export default function App() {
       <SettingsModal
         open={activeModal === 'settings'}
         settings={settings}
+        theme={theme}
+        profile={profile}
         sleepMinutesRemaining={audio.sleepMinutesRemaining}
         sleepOnTrackEnd={audio.sleepOnTrackEnd}
         isFloatingOpen={floating.isFloatingOpen}
@@ -1381,6 +1453,7 @@ export default function App() {
         fullscreenError={fullscreenError}
         t={t}
         onChangeSettings={setSettings}
+        onApplyStyleCode={handleApplyStyleCode}
         onSetSleepTimer={(mins, onEnd) => {
           audio.setSleepMinutesRemaining(mins);
           audio.setSleepOnTrackEnd(Boolean(onEnd));
@@ -1395,6 +1468,36 @@ export default function App() {
         linkCopied={linkCopied}
         onClose={() => setActiveModal(null)}
       />
+
+      {/* Quick Optional Screen Filter Switcher Only Shown During Fullscreen Mode */}
+      {isFullscreen && (
+        <div
+          className="fixed bottom-4 right-4 z-[80] flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl border shadow-lg backdrop-blur-md"
+          style={{
+            backgroundColor: 'color-mix(in srgb, var(--bg-elevated) 88%, transparent)',
+            borderColor: 'var(--divider-color)',
+          }}
+        >
+          <select
+            aria-label="Filtro de pantalla completa"
+            value={settings.screenOverlayFilter ?? 'none'}
+            onChange={(e) =>
+              setSettings((prev) => ({
+                ...prev,
+                screenOverlayFilter: e.target.value as AppSettings['screenOverlayFilter'],
+              }))
+            }
+            className="text-xs font-semibold bg-transparent focus:outline-none cursor-pointer pr-1"
+            style={{ color: 'var(--text-main)' }}
+          >
+            {SCREEN_OVERLAY_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id} style={{ color: '#1C1B1F' }}>
+                Filtro: {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <MusicPermissionModal
         open={musicPermissionOpen && !isLocked && !showIntro}

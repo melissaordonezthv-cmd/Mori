@@ -28,7 +28,20 @@ export type BackgroundColorId =
   | 'cacao'
   | 'espresso'
   | 'blanco'
-  | 'negro';
+  | 'negro'
+  | 'rojo'
+  | 'rojo_rubi'
+  | 'cereza'
+  | 'vino_oscuro'
+  | 'terracota'
+  | 'azul_rey'
+  | 'azul_marino'
+  | 'azul_medianoche'
+  | 'azul_zafiro'
+  | 'azul_electrico'
+  | 'esmeralda_oscuro'
+  | 'morado_intenso'
+  | 'magenta';
 
 export type DividerColorId =
   | 'suave'
@@ -50,7 +63,15 @@ export type DividerColorId =
   | 'avellana'
   | 'cacao'
   | 'blanco'
-  | 'negro';
+  | 'negro'
+  | 'rojo'
+  | 'carmesi'
+  | 'azul_rey'
+  | 'azul_marino'
+  | 'esmeralda'
+  | 'purpura'
+  | 'fucsia'
+  | 'dorado';
 
 export type TextColorId =
   | 'negro'
@@ -65,7 +86,15 @@ export type TextColorId =
   | 'rosa'
   | 'coral'
   | 'azul'
-  | 'morado';
+  | 'morado'
+  | 'rojo'
+  | 'carmesi'
+  | 'azul_rey'
+  | 'azul_marino'
+  | 'celeste_vivo'
+  | 'rosa_claro'
+  | 'esmeralda'
+  | 'fucsia';
 
 export type SettingsTextColorId = 'auto' | TextColorId | 'custom';
 
@@ -91,7 +120,18 @@ export type SongBarColorId =
   | 'chocolate'
   | 'espresso'
   | 'blanco'
-  | 'negro';
+  | 'negro'
+  | 'rojo_intenso'
+  | 'rojo_carmesi'
+  | 'vino_profundo'
+  | 'azul_rey'
+  | 'azul_marino'
+  | 'azul_electrico'
+  | 'cyan_intenso'
+  | 'verde_bosque'
+  | 'purpura_real'
+  | 'fucsia'
+  | 'dorado_intenso';
 
 export type AppLanguage = 'es' | 'en' | 'zh' | 'ja' | 'ko';
 
@@ -234,6 +274,14 @@ export type TrackCardColorId =
   | 'durazno'
   | 'menta'
   | 'vino'
+  | 'rojo_intenso'
+  | 'rojo_oscuro'
+  | 'azul_rey'
+  | 'azul_marino'
+  | 'azul_cobalto'
+  | 'verde_esmeralda'
+  | 'morado_noche'
+  | 'fucsia_intenso'
   | 'custom';
 
 export type TrackCardDecorId =
@@ -303,6 +351,57 @@ export type PlaybackButtonColorId =
   | 'champagne_rose'
   | 'sky_ice'
   | 'cherry_noir'
+  | 'rojo_carmesi'
+  | 'rojo_oscuro'
+  | 'azul_rey'
+  | 'azul_marino'
+  | 'esmeralda_oro'
+  | 'purpura_real'
+  | 'fucsia_vivo'
+  | 'custom';
+
+export type SongTitleShapeId =
+  | 'title_only'
+  | 'cloud_plush'
+  | 'ribbon_banner'
+  | 'ticket_stub'
+  | 'heart_plaque'
+  | 'capsule_3d'
+  | 'notebook_tab'
+  | 'polaroid_tag'
+  | 'crystal_glass'
+  | 'sakura_frame'
+  | 'starry_plaque'
+  | 'double_lace'
+  | 'kitty_ears'
+  | 'bunny_ears'
+  | 'wave_underline'
+  | 'gold_velvet';
+
+export type SongTitleColorId =
+  | 'auto'
+  | 'negro'
+  | 'blanco'
+  | 'crema'
+  | 'rosa_pastel'
+  | 'frambuesa'
+  | 'sakura'
+  | 'pistacho'
+  | 'menta'
+  | 'celeste'
+  | 'lavanda'
+  | 'durazno'
+  | 'chocolate'
+  | 'vino'
+  | 'oro_negro'
+  | 'rojo_intenso'
+  | 'carmesi_oscuro'
+  | 'azul_rey'
+  | 'azul_marino'
+  | 'azul_cobalto'
+  | 'verde_bosque'
+  | 'purpura_real'
+  | 'fucsia_vivo'
   | 'custom';
 
 export interface ThemeConfig {
@@ -312,6 +411,10 @@ export interface ThemeConfig {
   textColorId: TextColorId;
   songBarColorId: SongBarColorId;
   songBarAnimationId?: SongBarAnimationId;
+  songTitleShapeId?: SongTitleShapeId;
+  songTitleColorId?: SongTitleColorId;
+  songTitleCustomBg?: string;
+  songTitleCustomText?: string;
   trackCardStyleId?: TrackCardStyleId;
   trackCardColorId?: TrackCardColorId;
   trackCardCustomBg?: string;
@@ -481,6 +584,58 @@ export type NowPlayingVisualId =
   | 'equalizer_stage'
   | 'harmonic_waves';
 
+export type MusicCardOuterIconId =
+  | 'none'
+  | 'bow_ribbon'
+  | 'note_sparkle'
+  | 'kitty_silhouette'
+  | 'bunny_silhouette'
+  | 'bear_silhouette'
+  | 'sakura_flower'
+  | 'tulip_bloom'
+  | 'crescent_moon'
+  | 'cloud_dream'
+  | 'crystal_heart'
+  | 'butterfly_wing'
+  | 'crown_mini'
+  | 'headphones_cute'
+  | 'vinyl_mini'
+  | 'teacup_steam'
+  | 'clover_leaf'
+  | 'cherry_twin'
+  | 'star_gem';
+
+export type WallpaperFilterId = 'none' | 'blur_soft';
+
+export type WallpaperMotionId =
+  | 'none'
+  | 'flowers'
+  | 'leaves'
+  | 'chains'
+  | 'rain_drops'
+  | 'sparkles'
+  | 'butterflies'
+  | 'ribbons';
+
+export type ScreenOverlayFilterId =
+  | 'none'
+  | 'crystal_drops_tilt'
+  | 'fluid_bottom_water'
+  | 'rainy_window'
+  | 'water_ripples'
+  | 'soap_bubbles'
+  | 'liquid_mercury'
+  | 'plastic_bag'
+  | 'crushed_ice'
+  | 'frosted_glass'
+  | 'silk_veil'
+  | 'gold_dust'
+  | 'sakura_glass'
+  | 'snow_crystal'
+  | 'cd_prism'
+  | 'vintage_film'
+  | 'crt_scanlines';
+
 export interface AppSettings {
   language: AppLanguage;
   eqPreset: EqPresetId;
@@ -499,8 +654,18 @@ export interface AppSettings {
   nowPlayingAccentColor?: string;
   nowPlayingDetailColor?: string;
   nowPlayingHideCover?: boolean;
+  musicCardOuterIcon?: MusicCardOuterIconId;
+  musicCardOuterIconColor?: string;
   settingsTextColorId?: SettingsTextColorId;
   settingsTextCustomHex?: string;
+  trackCardWidthPercent?: number;
+  trackCardHeightPx?: number;
+  wallpaperUrl?: string;
+  wallpaperOpacity?: number;
+  wallpaperFilter?: WallpaperFilterId;
+  wallpaperMotion?: WallpaperMotionId;
+  screenOverlayFilter?: ScreenOverlayFilterId;
+  screenOverlayIntensity?: number;
 }
 
 export interface LockConfig {

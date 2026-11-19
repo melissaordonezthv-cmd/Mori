@@ -4,16 +4,22 @@ import type {
   ButtonThemeId,
   DividerColorId,
   EqPresetId,
+  MusicCardOuterIconId,
   MusicalMood,
   NowPlayingVisualId,
   PlaybackButton3DStyleId,
   PlaybackButtonColorId,
+  ScreenOverlayFilterId,
   SongBarAnimationId,
   SongBarColorId,
+  SongTitleColorId,
+  SongTitleShapeId,
   TextColorId,
   TrackCardColorId,
   TrackCardDecorId,
   TrackCardStyleId,
+  WallpaperFilterId,
+  WallpaperMotionId,
 } from '../types/music';
 
 export interface SurfaceSwatch {
@@ -360,6 +366,150 @@ export const SURFACE_SWATCHES: SurfaceSwatch[] = [
     swatchPreview: '#18191E',
     isDark: true,
   },
+  // Intense & dark reds, blues, emerald, purple, magenta
+  {
+    id: 'rojo',
+    label: 'Rojo Intenso',
+    bgApp: '#7F1D1D',
+    bgSurface: '#991B1B',
+    bgElevated: '#B91C1C',
+    accent: '#FCA5A5',
+    accentSoft: 'rgba(252, 165, 165, 0.25)',
+    swatchPreview: '#DC2626',
+    isDark: true,
+  },
+  {
+    id: 'rojo_rubi',
+    label: 'Rojo Rubí',
+    bgApp: '#660F24',
+    bgSurface: '#7D142E',
+    bgElevated: '#961A39',
+    accent: '#FDA4AF',
+    accentSoft: 'rgba(253, 164, 175, 0.24)',
+    swatchPreview: '#BE123C',
+    isDark: true,
+  },
+  {
+    id: 'cereza',
+    label: 'Cereza Oscuro',
+    bgApp: '#4C0D1D',
+    bgSurface: '#5F1225',
+    bgElevated: '#741930',
+    accent: '#F9A8D4',
+    accentSoft: 'rgba(249, 168, 212, 0.24)',
+    swatchPreview: '#881337',
+    isDark: true,
+  },
+  {
+    id: 'vino_oscuro',
+    label: 'Vino Profundo',
+    bgApp: '#2D0A16',
+    bgSurface: '#3D1020',
+    bgElevated: '#4E172B',
+    accent: '#F4B6CA',
+    accentSoft: 'rgba(244, 182, 202, 0.24)',
+    swatchPreview: '#4B1226',
+    isDark: true,
+  },
+  {
+    id: 'terracota',
+    label: 'Terracota',
+    bgApp: '#7C2D12',
+    bgSurface: '#9A3412',
+    bgElevated: '#B8431B',
+    accent: '#FDBA74',
+    accentSoft: 'rgba(253, 186, 116, 0.26)',
+    swatchPreview: '#C2410C',
+    isDark: true,
+  },
+  {
+    id: 'azul_rey',
+    label: 'Azul Rey',
+    bgApp: '#1E3A8A',
+    bgSurface: '#1D4ED8',
+    bgElevated: '#2563EB',
+    accent: '#93C5FD',
+    accentSoft: 'rgba(147, 197, 253, 0.26)',
+    swatchPreview: '#2563EB',
+    isDark: true,
+  },
+  {
+    id: 'azul_marino',
+    label: 'Azul Marino',
+    bgApp: '#0F172A',
+    bgSurface: '#172554',
+    bgElevated: '#1E293B',
+    accent: '#7DD3FC',
+    accentSoft: 'rgba(125, 211, 252, 0.25)',
+    swatchPreview: '#172554',
+    isDark: true,
+  },
+  {
+    id: 'azul_medianoche',
+    label: 'Azul Noche',
+    bgApp: '#0B1120',
+    bgSurface: '#111C33',
+    bgElevated: '#172542',
+    accent: '#60A5FA',
+    accentSoft: 'rgba(96, 165, 250, 0.25)',
+    swatchPreview: '#0F1D3A',
+    isDark: true,
+  },
+  {
+    id: 'azul_zafiro',
+    label: 'Zafiro Oscuro',
+    bgApp: '#0C4A6E',
+    bgSurface: '#075985',
+    bgElevated: '#0369A1',
+    accent: '#7DD3FC',
+    accentSoft: 'rgba(125, 211, 252, 0.26)',
+    swatchPreview: '#0284C7',
+    isDark: true,
+  },
+  {
+    id: 'azul_electrico',
+    label: 'Azul Cobalto',
+    bgApp: '#172554',
+    bgSurface: '#1E3A8A',
+    bgElevated: '#1E40AF',
+    accent: '#BAE6FD',
+    accentSoft: 'rgba(186, 230, 253, 0.25)',
+    swatchPreview: '#1D4ED8',
+    isDark: true,
+  },
+  {
+    id: 'esmeralda_oscuro',
+    label: 'Esmeralda Oscuro',
+    bgApp: '#064E3B',
+    bgSurface: '#065F46',
+    bgElevated: '#047857',
+    accent: '#6EE7B7',
+    accentSoft: 'rgba(110, 231, 183, 0.25)',
+    swatchPreview: '#059669',
+    isDark: true,
+  },
+  {
+    id: 'morado_intenso',
+    label: 'Púrpura Real',
+    bgApp: '#3B0764',
+    bgSurface: '#4C1D95',
+    bgElevated: '#5B21B6',
+    accent: '#D8B4FE',
+    accentSoft: 'rgba(216, 180, 254, 0.26)',
+    swatchPreview: '#6D28D9',
+    isDark: true,
+  },
+  {
+    id: 'magenta',
+    label: 'Fucsia Intenso',
+    bgApp: '#701A75',
+    bgSurface: '#86198F',
+    bgElevated: '#A21CAF',
+    accent: '#F5D0FE',
+    accentSoft: 'rgba(245, 208, 254, 0.25)',
+    swatchPreview: '#C026D3',
+    isDark: true,
+  },
 ];
 
 export interface DividerSwatch {
@@ -389,6 +539,14 @@ export const DIVIDER_SWATCHES: DividerSwatch[] = [
   { id: 'cacao', label: 'Cacao', color: '#5A4134' },
   { id: 'blanco', label: 'Blanco', color: '#FFFFFF' },
   { id: 'negro', label: 'Negro', color: '#27272A' },
+  { id: 'rojo', label: 'Rojo Intenso', color: '#DC2626' },
+  { id: 'carmesi', label: 'Carmesí', color: '#881337' },
+  { id: 'azul_rey', label: 'Azul Rey', color: '#2563EB' },
+  { id: 'azul_marino', label: 'Azul Marino', color: '#1E3A8A' },
+  { id: 'esmeralda', label: 'Esmeralda', color: '#059669' },
+  { id: 'purpura', label: 'Púrpura', color: '#7C3AED' },
+  { id: 'fucsia', label: 'Fucsia', color: '#DB2777' },
+  { id: 'dorado', label: 'Dorado', color: '#D97706' },
 ];
 
 export interface TextSwatch {
@@ -477,6 +635,54 @@ export const TEXT_SWATCHES: TextSwatch[] = [
     hex: '#5B3A7A',
     mutedHex: 'rgba(91, 58, 122, 0.72)',
   },
+  {
+    id: 'rojo',
+    label: 'Rojo Vivo',
+    hex: '#DC2626',
+    mutedHex: 'rgba(220, 38, 38, 0.76)',
+  },
+  {
+    id: 'carmesi',
+    label: 'Carmesí',
+    hex: '#881337',
+    mutedHex: 'rgba(136, 19, 55, 0.74)',
+  },
+  {
+    id: 'azul_rey',
+    label: 'Azul Rey',
+    hex: '#1D4ED8',
+    mutedHex: 'rgba(29, 78, 216, 0.76)',
+  },
+  {
+    id: 'azul_marino',
+    label: 'Azul Marino',
+    hex: '#0F295C',
+    mutedHex: 'rgba(15, 41, 92, 0.74)',
+  },
+  {
+    id: 'celeste_vivo',
+    label: 'Celeste Luz',
+    hex: '#93C5FD',
+    mutedHex: 'rgba(147, 197, 253, 0.78)',
+  },
+  {
+    id: 'rosa_claro',
+    label: 'Rosa Luz',
+    hex: '#FBCFE8',
+    mutedHex: 'rgba(251, 207, 232, 0.78)',
+  },
+  {
+    id: 'esmeralda',
+    label: 'Esmeralda',
+    hex: '#059669',
+    mutedHex: 'rgba(5, 150, 105, 0.74)',
+  },
+  {
+    id: 'fucsia',
+    label: 'Fucsia',
+    hex: '#C026D3',
+    mutedHex: 'rgba(192, 38, 211, 0.74)',
+  },
 ];
 
 export interface SongBarSwatch {
@@ -509,6 +715,17 @@ export const SONG_BAR_SWATCHES: SongBarSwatch[] = [
   { id: 'espresso', label: 'Espresso', color: '#3E271C' },
   { id: 'blanco', label: 'Blanco', color: '#FFFFFF', isLight: true },
   { id: 'negro', label: 'Negro', color: '#1C1B1F' },
+  { id: 'rojo_intenso', label: 'Rojo Intenso', color: '#DC2626' },
+  { id: 'rojo_carmesi', label: 'Rojo Carmesí', color: '#991B1B' },
+  { id: 'vino_profundo', label: 'Vino Oscuro', color: '#581124' },
+  { id: 'azul_rey', label: 'Azul Rey', color: '#2563EB' },
+  { id: 'azul_marino', label: 'Azul Marino', color: '#1E3A8A' },
+  { id: 'azul_electrico', label: 'Azul Eléctrico', color: '#0284C7' },
+  { id: 'cyan_intenso', label: 'Cian Vivo', color: '#06B6D4' },
+  { id: 'verde_bosque', label: 'Verde Bosque', color: '#065F46' },
+  { id: 'purpura_real', label: 'Púrpura Real', color: '#7C3AED' },
+  { id: 'fucsia', label: 'Fucsia Vivo', color: '#DB2777' },
+  { id: 'dorado_intenso', label: 'Dorado Intenso', color: '#D97706' },
 ];
 
 export const MOOD_AURAS: Record<
@@ -728,6 +945,14 @@ export const TRACK_CARD_COLOR_PRESETS: TrackCardColorPreset[] = [
   { id: 'durazno', label: 'Durazno', bg: '#FFF3E8', activeBg: '#FFE4CE', text: '#5B3420', muted: 'rgba(91,52,32,0.7)', border: '#F4BC98', preview: '#FCDDC4' },
   { id: 'menta', label: 'Menta', bg: '#EDFAF3', activeBg: '#D8F4E5', text: '#1C4B36', muted: 'rgba(28,75,54,0.7)', border: '#9AD9B8', preview: '#C6EED8' },
   { id: 'vino', label: 'Vino chic', bg: '#3E1C28', activeBg: '#512535', text: '#FFF0F4', muted: 'rgba(255,240,244,0.72)', border: '#8B4A62', preview: '#3E1C28' },
+  { id: 'rojo_intenso', label: 'Rojo intenso', bg: '#991B1B', activeBg: '#B91C1C', text: '#FFFFFF', muted: 'rgba(255,255,255,0.78)', border: '#FCA5A5', preview: '#B91C1C' },
+  { id: 'rojo_oscuro', label: 'Rojo rubí', bg: '#5C0D1E', activeBg: '#78142B', text: '#FFF1F4', muted: 'rgba(255,241,244,0.75)', border: '#FB7185', preview: '#6B1126' },
+  { id: 'azul_rey', label: 'Azul rey', bg: '#1D4ED8', activeBg: '#2563EB', text: '#FFFFFF', muted: 'rgba(255,255,255,0.8)', border: '#93C5FD', preview: '#1D4ED8' },
+  { id: 'azul_marino', label: 'Azul marino', bg: '#0F1E3D', activeBg: '#172E5C', text: '#F0F7FF', muted: 'rgba(240,247,255,0.76)', border: '#60A5FA', preview: '#0F1E3D' },
+  { id: 'azul_cobalto', label: 'Azul cobalto', bg: '#0C4A6E', activeBg: '#0369A1', text: '#F0F9FF', muted: 'rgba(240,249,255,0.76)', border: '#7DD3FC', preview: '#0369A1' },
+  { id: 'verde_esmeralda', label: 'Esmeralda', bg: '#065F46', activeBg: '#047857', text: '#ECFDF5', muted: 'rgba(236,253,245,0.78)', border: '#6EE7B7', preview: '#059669' },
+  { id: 'morado_noche', label: 'Púrpura real', bg: '#4C1D95', activeBg: '#5B21B6', text: '#F5F3FF', muted: 'rgba(245,243,255,0.78)', border: '#C4B5FD', preview: '#5B21B6' },
+  { id: 'fucsia_intenso', label: 'Fucsia vivo', bg: '#86198F', activeBg: '#A21CAF', text: '#FDF4FF', muted: 'rgba(253,244,255,0.78)', border: '#F0ABFC', preview: '#A21CAF' },
   { id: 'custom', label: 'Tu color', bg: 'custom', text: 'custom', muted: 'custom', border: 'custom', preview: 'linear-gradient(135deg,#F4B8CC,#9FD3F7,#B8DDA1)' },
 ];
 
@@ -832,6 +1057,13 @@ export const PLAYBACK_BUTTON_COLOR_PRESETS: PlaybackButtonColorPreset[] = [
   { id: 'champagne_rose', label: 'Champán dorado', playBg: '#E6C285', navBg: '#FFF9EE', playIcon: '#3B290E', navIcon: '#5C431C', rim: '#B68C49' },
   { id: 'sky_ice', label: 'Celeste hielo', playBg: '#7CC3F7', navBg: '#EFF8FF', playIcon: '#10314C', navIcon: '#1D496E', rim: '#4B99D6' },
   { id: 'cherry_noir', label: 'Cereza vino', playBg: '#75203A', navBg: '#FCEEF3', playIcon: '#FFF4F7', navIcon: '#5B192E', rim: '#4A1022' },
+  { id: 'rojo_carmesi', label: 'Rojo Carmesí', playBg: '#DC2626', navBg: '#991B1B', playIcon: '#FFFFFF', navIcon: '#FEE2E2', rim: '#7F1D1D' },
+  { id: 'rojo_oscuro', label: 'Rojo Rubí Oscuro', playBg: '#881337', navBg: '#4C0D1D', playIcon: '#FFF1F2', navIcon: '#FECDD3', rim: '#3B0816' },
+  { id: 'azul_rey', label: 'Azul Rey Intenso', playBg: '#2563EB', navBg: '#1E3A8A', playIcon: '#FFFFFF', navIcon: '#DBEAFE', rim: '#172554' },
+  { id: 'azul_marino', label: 'Azul Marino Noche', playBg: '#0F172A', navBg: '#1E293B', playIcon: '#7DD3FC', navIcon: '#E0F2FE', rim: '#020617' },
+  { id: 'esmeralda_oro', label: 'Esmeralda & Oro', playBg: '#059669', navBg: '#064E3B', playIcon: '#FEF3C7', navIcon: '#A7F3D0', rim: '#022C22' },
+  { id: 'purpura_real', label: 'Púrpura Real', playBg: '#7C3AED', navBg: '#4C1D95', playIcon: '#FFFFFF', navIcon: '#EDE9FE', rim: '#2E1065' },
+  { id: 'fucsia_vivo', label: 'Fucsia Brillante', playBg: '#DB2777', navBg: '#831843', playIcon: '#FFFFFF', navIcon: '#FCE7F3', rim: '#500724' },
   { id: 'custom', label: 'Tu color', playBg: 'custom', navBg: 'custom', playIcon: 'custom', navIcon: 'custom', rim: 'custom' },
 ];
 
@@ -887,9 +1119,433 @@ export const NOW_PLAYING_COLOR_PRESETS: Array<{
   { label: 'Durazno & Rosa', primary: '#F5AE8D', secondary: '#FFF5EE', accent: '#F393B3', detail: '#7E4530' },
   { label: 'Menta Hielo', primary: '#7ED7B1', secondary: '#EEFAF5', accent: '#F8DF9D', detail: '#215B44' },
   { label: 'Cuarzo Rosa', primary: '#E89EB6', secondary: '#FDF6F8', accent: '#D6A468', detail: '#6D3C4E' },
+  { label: 'Rojo Carmesí', primary: '#B91C1C', secondary: '#FFF1F2', accent: '#FCA5A5', detail: '#450A0A' },
+  { label: 'Azul Rey & Plata', primary: '#1D4ED8', secondary: '#EFF6FF', accent: '#E2E8F0', detail: '#172554' },
+  { label: 'Azul Noche & Cian', primary: '#0F172A', secondary: '#1E293B', accent: '#38BDF8', detail: '#020617' },
+  { label: 'Esmeralda Real', primary: '#047857', secondary: '#ECFDF5', accent: '#FCD34D', detail: '#022C22' },
 ];
 
 export const DEFAULT_AVATAR_URL = '/src/assets/images/cute_avatar_default_1794973377333.jpg';
 export const DEFAULT_BANNER_URL = '/src/assets/images/cute_banner_default_1794973376848.jpg';
 export const DEFAULT_COVER_SAKURA = '/src/assets/images/cover_sakura_lo_1794973378033.jpg';
 export const DEFAULT_COVER_CLOUD = '/src/assets/images/cover_cloud_melody_1794973378393.jpg';
+
+export interface SongTitleShapePreset {
+  id: SongTitleShapeId;
+  label: string;
+  description: string;
+}
+
+export const SONG_TITLE_SHAPES: SongTitleShapePreset[] = [
+  { id: 'title_only', label: 'Solo el título', description: 'Texto limpio sin marco ni adornos' },
+  { id: 'cloud_plush', label: 'Nube esponjosa', description: 'Contorno mullido de nube pastel' },
+  { id: 'ribbon_banner', label: 'Listón coquette', description: 'Cinta elegante con lazo fino' },
+  { id: 'ticket_stub', label: 'Ticket musical', description: 'Muescas laterales y borde punteado' },
+  { id: 'heart_plaque', label: 'Placa corazón', description: 'Marco suave con corazón lineal' },
+  { id: 'capsule_3d', label: 'Cápsula 3D', description: 'Relieve tridimensional muy nítido' },
+  { id: 'notebook_tab', label: 'Hoja de libreta', description: 'Renglones delicados y pestaña lateral' },
+  { id: 'polaroid_tag', label: 'Etiqueta Polaroid', description: 'Cartulina estilizada con cinta superior' },
+  { id: 'crystal_glass', label: 'Cristal glaseado', description: 'Placa acrílica con brillo suave' },
+  { id: 'sakura_frame', label: 'Marco sakura', description: 'Detalle floral vectorial en la esquina' },
+  { id: 'starry_plaque', label: 'Placa estelar', description: 'Destellos finos geométricos' },
+  { id: 'double_lace', label: 'Encaje doble', description: 'Doble marco punteado delicado' },
+  { id: 'kitty_ears', label: 'Orejitas gatito', description: 'Silueta kawaii sobre el título' },
+  { id: 'bunny_ears', label: 'Orejitas conejo', description: 'Orejitas suaves arriba del título' },
+  { id: 'wave_underline', label: 'Onda melódica', description: 'Subrayado ondulado musical abierto' },
+  { id: 'gold_velvet', label: 'Placa chic', description: 'Doble filo elegante con acento' },
+];
+
+export interface SongTitleColorPreset {
+  id: SongTitleColorId;
+  label: string;
+  bg: string;
+  text: string;
+  border: string;
+  accent: string;
+  plainText: string;
+  preview: string;
+}
+
+export const SONG_TITLE_COLOR_PRESETS: SongTitleColorPreset[] = [
+  {
+    id: 'auto',
+    label: 'Del tema',
+    bg: 'var(--bg-surface)',
+    text: 'var(--text-main)',
+    border: 'var(--accent-color)',
+    accent: 'var(--accent-color)',
+    plainText: 'var(--text-main)',
+    preview: 'var(--accent-color)',
+  },
+  {
+    id: 'negro',
+    label: 'Negro tinta',
+    bg: '#16161B',
+    text: '#FFFFFF',
+    border: '#3C3C48',
+    accent: '#D4D4E0',
+    plainText: '#16161B',
+    preview: '#16161B',
+  },
+  {
+    id: 'blanco',
+    label: 'Blanco puro',
+    bg: '#FFFFFF',
+    text: '#1C1B1F',
+    border: '#DCDCE4',
+    accent: '#8E8E9E',
+    plainText: '#FFFFFF',
+    preview: '#FFFFFF',
+  },
+  {
+    id: 'crema',
+    label: 'Crema tibia',
+    bg: '#FFF8EB',
+    text: '#3F2F21',
+    border: '#DFC7A4',
+    accent: '#B48854',
+    plainText: '#6B4E34',
+    preview: '#F7E8CF',
+  },
+  {
+    id: 'rosa_pastel',
+    label: 'Rosa pastel',
+    bg: '#FFEBF2',
+    text: '#5A1F38',
+    border: '#F2ABC4',
+    accent: '#D6648D',
+    plainText: '#B84A6F',
+    preview: '#FAD4E2',
+  },
+  {
+    id: 'frambuesa',
+    label: 'Frambuesa',
+    bg: '#D44D7D',
+    text: '#FFFFFF',
+    border: '#A7315C',
+    accent: '#FFD7E6',
+    plainText: '#C53A6C',
+    preview: '#D44D7D',
+  },
+  {
+    id: 'sakura',
+    label: 'Sakura suave',
+    bg: '#FFF3F7',
+    text: '#6A2742',
+    border: '#F5BACF',
+    accent: '#E0799E',
+    plainText: '#B64B73',
+    preview: '#F9DAE6',
+  },
+  {
+    id: 'pistacho',
+    label: 'Pistacho',
+    bg: '#ECF8E4',
+    text: '#21421D',
+    border: '#A0CF85',
+    accent: '#5C9840',
+    plainText: '#2F6627',
+    preview: '#CFEAC0',
+  },
+  {
+    id: 'menta',
+    label: 'Menta fresca',
+    bg: '#E6F9F0',
+    text: '#164531',
+    border: '#8ED5B5',
+    accent: '#37986E',
+    plainText: '#1D6B4A',
+    preview: '#BBEBD4',
+  },
+  {
+    id: 'celeste',
+    label: 'Celeste cielo',
+    bg: '#EAF5FF',
+    text: '#163A5C',
+    border: '#96CBF4',
+    accent: '#3A88C8',
+    plainText: '#25639B',
+    preview: '#C3E4FD',
+  },
+  {
+    id: 'lavanda',
+    label: 'Lavanda nube',
+    bg: '#F2ECFF',
+    text: '#392561',
+    border: '#C3ABF6',
+    accent: '#7D5CC8',
+    plainText: '#5C3FA8',
+    preview: '#DDD0FC',
+  },
+  {
+    id: 'durazno',
+    label: 'Durazno',
+    bg: '#FFF0E5',
+    text: '#5A2F19',
+    border: '#F3B48D',
+    accent: '#CF6F3B',
+    plainText: '#A84E24',
+    preview: '#FAD6BE',
+  },
+  {
+    id: 'chocolate',
+    label: 'Chocolate',
+    bg: '#4A2F22',
+    text: '#FFF4E8',
+    border: '#8E644E',
+    accent: '#E5BC96',
+    plainText: '#5B3928',
+    preview: '#4A2F22',
+  },
+  {
+    id: 'vino',
+    label: 'Vino chic',
+    bg: '#4B192B',
+    text: '#FFF0F5',
+    border: '#9C4D69',
+    accent: '#F4B6CA',
+    plainText: '#72233E',
+    preview: '#4B192B',
+  },
+  {
+    id: 'oro_negro',
+    label: 'Negro & Oro',
+    bg: '#18181F',
+    text: '#F7DFAC',
+    border: '#C99E4E',
+    accent: '#E9C477',
+    plainText: '#8E681E',
+    preview: 'linear-gradient(135deg,#18181F 55%,#E9C477 100%)',
+  },
+  {
+    id: 'rojo_intenso',
+    label: 'Rojo Intenso',
+    bg: '#B91C1C',
+    text: '#FFFFFF',
+    border: '#FCA5A5',
+    accent: '#FEE2E2',
+    plainText: '#DC2626',
+    preview: '#DC2626',
+  },
+  {
+    id: 'carmesi_oscuro',
+    label: 'Carmesí Oscuro',
+    bg: '#5C0D1E',
+    text: '#FFF1F2',
+    border: '#FB7185',
+    accent: '#FDA4AF',
+    plainText: '#881337',
+    preview: '#881337',
+  },
+  {
+    id: 'azul_rey',
+    label: 'Azul Rey',
+    bg: '#1D4ED8',
+    text: '#FFFFFF',
+    border: '#93C5FD',
+    accent: '#DBEAFE',
+    plainText: '#2563EB',
+    preview: '#2563EB',
+  },
+  {
+    id: 'azul_marino',
+    label: 'Azul Marino',
+    bg: '#0F172A',
+    text: '#F0F9FF',
+    border: '#60A5FA',
+    accent: '#7DD3FC',
+    plainText: '#1E3A8A',
+    preview: '#172554',
+  },
+  {
+    id: 'azul_cobalto',
+    label: 'Azul Cobalto',
+    bg: '#0369A1',
+    text: '#FFFFFF',
+    border: '#7DD3FC',
+    accent: '#BAE6FD',
+    plainText: '#0284C7',
+    preview: '#0284C7',
+  },
+  {
+    id: 'verde_bosque',
+    label: 'Esmeralda',
+    bg: '#065F46',
+    text: '#ECFDF5',
+    border: '#6EE7B7',
+    accent: '#A7F3D0',
+    plainText: '#059669',
+    preview: '#059669',
+  },
+  {
+    id: 'purpura_real',
+    label: 'Púrpura Real',
+    bg: '#5B21B6',
+    text: '#F5F3FF',
+    border: '#C4B5FD',
+    accent: '#DDD6FE',
+    plainText: '#7C3AED',
+    preview: '#6D28D9',
+  },
+  {
+    id: 'fucsia_vivo',
+    label: 'Fucsia Vivo',
+    bg: '#A21CAF',
+    text: '#FDF4FF',
+    border: '#F0ABFC',
+    accent: '#F5D0FE',
+    plainText: '#C026D3',
+    preview: '#C026D3',
+  },
+  {
+    id: 'custom',
+    label: 'Tu color',
+    bg: 'custom',
+    text: 'custom',
+    border: 'custom',
+    accent: 'custom',
+    plainText: 'custom',
+    preview: 'linear-gradient(135deg,#F4A6C1,#7CC3F7,#9BD27E)',
+  },
+];
+
+export interface MusicCardOuterIconOption {
+  id: MusicCardOuterIconId;
+  label: string;
+}
+
+export const MUSIC_CARD_OUTER_ICONS: MusicCardOuterIconOption[] = [
+  { id: 'none', label: 'Ninguno' },
+  { id: 'note_sparkle', label: 'Nota musical' },
+  { id: 'bow_ribbon', label: 'Moñito fino' },
+  { id: 'kitty_silhouette', label: 'Gatito kawaii' },
+  { id: 'bunny_silhouette', label: 'Conejito tierno' },
+  { id: 'bear_silhouette', label: 'Osito dulce' },
+  { id: 'sakura_flower', label: 'Flor sakura' },
+  { id: 'tulip_bloom', label: 'Tulipán' },
+  { id: 'crescent_moon', label: 'Luna y estrella' },
+  { id: 'cloud_dream', label: 'Nube esponjosa' },
+  { id: 'crystal_heart', label: 'Corazón joya' },
+  { id: 'butterfly_wing', label: 'Mariposita' },
+  { id: 'crown_mini', label: 'Coronita' },
+  { id: 'headphones_cute', label: 'Audífonos' },
+  { id: 'vinyl_mini', label: 'Mini vinilo' },
+  { id: 'teacup_steam', label: 'Tacita tibia' },
+  { id: 'clover_leaf', label: 'Trébol' },
+  { id: 'cherry_twin', label: 'Cerecitas' },
+  { id: 'star_gem', label: 'Estrella brillo' },
+];
+
+export const WALLPAPER_FILTER_OPTIONS: Array<{
+  id: WallpaperFilterId;
+  label: string;
+  description: string;
+}> = [
+  { id: 'none', label: 'Sin filtro', description: 'Imagen limpia tal cual' },
+  { id: 'blur_soft', label: 'Borroso', description: 'Fondo difuminado detrás de tus accesorios' },
+];
+
+export const WALLPAPER_MOTION_OPTIONS: Array<{
+  id: WallpaperMotionId;
+  label: string;
+  description: string;
+}> = [
+  { id: 'none', label: 'Sin movimiento', description: 'Fondo estático' },
+  { id: 'flowers', label: 'Flores flotando', description: 'Pétalos y flores suaves en brisa' },
+  { id: 'leaves', label: 'Hojas cayendo', description: 'Hojas naturales meciéndose' },
+  { id: 'chains', label: 'Cadenas colgantes', description: 'Cadenitas finas balanceándose' },
+  { id: 'rain_drops', label: 'Gotas deslizantes', description: 'Gotitas finas sobre el fondo' },
+  { id: 'sparkles', label: 'Destellos / Luciérnagas', description: 'Brillos flotantes sutiles' },
+  { id: 'butterflies', label: 'Mariposas', description: 'Vuelo suave detrás de la app' },
+  { id: 'ribbons', label: 'Lazos y pétalos', description: 'Cintas ligeras en el aire' },
+];
+
+export const SCREEN_OVERLAY_FILTER_OPTIONS: Array<{
+  id: ScreenOverlayFilterId;
+  label: string;
+  description: string;
+}> = [
+  { id: 'none', label: 'Sin filtro', description: 'Pantalla completamente limpia' },
+  {
+    id: 'crystal_drops_tilt',
+    label: 'Gotas + agua móvil',
+    description: 'Gotas cristalinas 3D y agua fluida abajo que responde al mover el móvil',
+  },
+  {
+    id: 'fluid_bottom_water',
+    label: 'Agua cristalina abajo',
+    description: 'Agua pura con olas, reflejos y burbujas que fluye al inclinar el teléfono',
+  },
+  {
+    id: 'rainy_window',
+    label: 'Ventana lluviosa',
+    description: 'Lluvia 3D WebGL cristalina con física real y acelerómetro al inclinar el móvil',
+  },
+  {
+    id: 'water_ripples',
+    label: 'Ondas en espejo de agua',
+    description: 'Ondas líquidas transparentes y caústicas brillando en movimiento',
+  },
+  {
+    id: 'plastic_bag',
+    label: 'Bolsa de plástico',
+    description: 'Pliegue brillante y reflejos nítidos de celofán transparente',
+  },
+  {
+    id: 'soap_bubbles',
+    label: 'Burbujas iridiscentes',
+    description: 'Burbujas de jabón translúcidas flotando suavemente',
+  },
+  {
+    id: 'liquid_mercury',
+    label: 'Lágrimas de cristal',
+    description: 'Gotas líquidas orgánicas con brillo de espejo deslizándose',
+  },
+  {
+    id: 'crushed_ice',
+    label: 'Hielo fracturado',
+    description: 'Facetas cristalinas translúcidas con destellos helados',
+  },
+  {
+    id: 'frosted_glass',
+    label: 'Cristal empañado',
+    description: 'Bordes esmerilados y textura de vidrio tibio',
+  },
+  {
+    id: 'silk_veil',
+    label: 'Velo de seda móvil',
+    description: 'Textura fina de tul translúcido mecida por la brisa',
+  },
+  {
+    id: 'gold_dust',
+    label: 'Polvo dorado flotante',
+    description: 'Destellos finos y luces bokeh cálidas en suspensión',
+  },
+  {
+    id: 'sakura_glass',
+    label: 'Cristal con pétalos',
+    description: 'Vidrio claro con rocío cristalino y pétalos cayendo',
+  },
+  {
+    id: 'snow_crystal',
+    label: 'Nieve y escarcha móvil',
+    description: 'Copos suaves y cristales translúcidos cayendo',
+  },
+  {
+    id: 'cd_prism',
+    label: 'Prisma arcoíris',
+    description: 'Destellos iridiscentes de luz solar',
+  },
+  {
+    id: 'vintage_film',
+    label: 'Película 35mm',
+    description: 'Grano analógico suave y fuga de luz cálida',
+  },
+  {
+    id: 'crt_scanlines',
+    label: 'Monitor retro',
+    description: 'Líneas finas de pantalla vintage y brillo suave',
+  },
+];
+
+

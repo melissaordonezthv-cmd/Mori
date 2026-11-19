@@ -104,7 +104,7 @@ export function getTrackCardPresentation(
     return {
       isGroupedList: true,
       containerClassName:
-        'px-3.5 sm:px-4 py-3 flex items-center justify-between gap-3 transition-colors relative',
+        'px-3.5 sm:px-4 py-3 flex flex-col gap-1.5 transition-colors relative',
       containerStyle: {
         borderTopWidth: isFirstInList ? 0 : '1.5px',
         borderTopStyle: 'solid',
@@ -119,7 +119,7 @@ export function getTrackCardPresentation(
   }
 
   let containerClassName =
-    'px-3.5 py-2.5 flex items-center justify-between gap-3 transition-all relative overflow-visible';
+    'px-3.5 py-2.5 flex flex-col gap-1.5 transition-all relative overflow-visible';
   let containerStyle: React.CSSProperties = {
     backgroundColor: isCurrent ? 'var(--accent-soft)' : 'var(--bg-elevated)',
     border: `1.5px solid ${isCurrent ? 'var(--accent-color)' : 'var(--divider-color)'}`,
