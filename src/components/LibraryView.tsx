@@ -28,7 +28,7 @@ import type {
   TrackCardStyleId,
 } from '../types/music';
 import { collectAudioFilesFromDirectory, formatDuration } from '../utils/audioMetadata';
-import { getTrackCardPresentation } from '../utils/trackCardStyles';
+import { applyOpacityToColorValue, getTrackCardPresentation } from '../utils/trackCardStyles';
 import { SongTitleDisplay } from './SongTitleDisplay';
 
 export type LibraryTab = 'all' | 'lossless' | 'favorites' | 'playlists';
@@ -48,6 +48,8 @@ interface LibraryViewProps {
   trackCardCustomBg?: string;
   trackCardCustomText?: string;
   trackCardDecorId?: TrackCardDecorId;
+  trackCardOpacity?: number;
+  trackCardBlur?: number;
   songTitleShapeId?: SongTitleShapeId;
   songTitleColorId?: SongTitleColorId;
   songTitleCustomBg?: string;
@@ -86,6 +88,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   trackCardCustomBg,
   trackCardCustomText,
   trackCardDecorId = 'auto',
+  trackCardOpacity = 100,
+  trackCardBlur = 0,
   songTitleShapeId = 'cloud_plush',
   songTitleColorId = 'auto',
   songTitleCustomBg,
@@ -763,6 +767,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   const safeCardHeight = Math.min(176, Math.max(56, trackCardHeightPx));
                   const isVerySlimHeight = safeCardHeight <= 76;
                   const isTallCard = safeCardHeight >= 112;
+                  const safeCardOpacity = Math.min(100, Math.max(15, trackCardOpacity));
+                  const safeCardBlur = Math.min(20, Math.max(0, trackCardBlur));
                   return (
                 <div
                   className={
@@ -773,8 +779,17 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   style={{
                     ...(isGroupedListStyle
                       ? {
-                          backgroundColor: 'var(--bg-elevated)',
+                          backgroundColor: applyOpacityToColorValue(
+                            'var(--bg-elevated)',
+                            safeCardOpacity
+                          ),
                           borderColor: 'var(--divider-color)',
+                          ...(safeCardBlur > 0
+                            ? {
+                                backdropFilter: `blur(${safeCardBlur}px)`,
+                                WebkitBackdropFilter: `blur(${safeCardBlur}px)`,
+                              }
+                            : {}),
                         }
                       : {}),
                     width: `${safeCardWidth}%`,
@@ -793,6 +808,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                         colorId: trackCardColorId,
                         customBg: trackCardCustomBg,
                         customText: trackCardCustomText,
+                      },
+                      {
+                        opacityPercent: safeCardOpacity,
+                        blurPx: safeCardBlur,
                       }
                     );
 

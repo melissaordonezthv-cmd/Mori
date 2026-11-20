@@ -6,10 +6,15 @@ export type ActivePanelModal = 'profile' | 'theme' | 'settings' | 'lock' | 'soun
 
 interface HamburgerMenuProps {
   t: Translations;
+  hasUpdate?: boolean;
   onSelect: (panel: ActivePanelModal) => void;
 }
 
-export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ t, onSelect }) => {
+export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
+  t,
+  hasUpdate = false,
+  onSelect,
+}) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -40,9 +45,9 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ t, onSelect }) => 
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        aria-label="Abrir menú principal"
+        aria-label={hasUpdate ? 'Abrir menú principal (hay una actualización disponible)' : 'Abrir menú principal'}
         aria-expanded={open}
-        className="min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-transform active:scale-95 border"
+        className="relative min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-transform active:scale-95 border"
         style={{
           backgroundColor: 'var(--bg-elevated)',
           borderColor: 'var(--divider-color)',
@@ -50,6 +55,16 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ t, onSelect }) => 
         }}
       >
         {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        {hasUpdate && (
+          <span
+            aria-label="Actualización disponible"
+            className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse"
+            style={{
+              backgroundColor: '#A3E635',
+              boxShadow: '0 0 8px rgba(163, 230, 53, 0.9), 0 0 0 2px var(--bg-elevated)',
+            }}
+          />
+        )}
       </button>
 
       {open && (
@@ -97,15 +112,27 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ t, onSelect }) => 
             type="button"
             role="menuitem"
             onClick={() => handleChoose('settings')}
-            className="w-full min-h-[44px] px-3 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-colors hover:opacity-80 text-left"
+            className="w-full min-h-[44px] px-3 py-2.5 rounded-xl flex items-center justify-between gap-2 text-sm font-medium transition-colors hover:opacity-80 text-left"
           >
-            <span
-              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-              style={{ backgroundColor: 'var(--accent-soft)' }}
-            >
-              <Settings className="w-4 h-4" />
-            </span>
-            <span className="whitespace-nowrap">{t.menuSettings}</span>
+            <div className="flex items-center gap-3 min-w-0">
+              <span
+                className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                style={{ backgroundColor: 'var(--accent-soft)' }}
+              >
+                <Settings className="w-4 h-4" />
+              </span>
+              <span className="whitespace-nowrap">{t.menuSettings}</span>
+            </div>
+            {hasUpdate && (
+              <span
+                title="Hay un cambio nuevo para actualizar"
+                className="w-2.5 h-2.5 rounded-full shrink-0 animate-pulse"
+                style={{
+                  backgroundColor: '#A3E635',
+                  boxShadow: '0 0 7px rgba(163, 230, 53, 0.85)',
+                }}
+              />
+            )}
           </button>
 
           <button

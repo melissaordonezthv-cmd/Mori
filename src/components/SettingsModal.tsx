@@ -16,6 +16,7 @@ import {
   Maximize2,
   Minimize2,
   PictureInPicture2,
+  RefreshCw,
   RotateCcw,
   RotateCw,
   Share2,
@@ -60,6 +61,7 @@ import {
   decodeStyleCode,
   encodeStyleCode,
 } from '../utils/styleCode';
+import { applyOpacityToColorValue } from '../utils/trackCardStyles';
 import { MusicCardOuterIcon, MusicCardOuterSvg } from './MusicCardOuterIcon';
 import { NowPlayingVisualStage } from './NowPlayingVisualStage';
 
@@ -88,6 +90,7 @@ interface SettingsModalProps {
   fullscreenError?: string | null;
   t: Translations;
   onChangeSettings: (next: AppSettings) => void;
+  onChangeTheme?: (next: ThemeConfig) => void;
   onApplyStyleCode: (
     nextTheme: ThemeConfig,
     nextProfile: ProfileConfig,
@@ -102,6 +105,10 @@ interface SettingsModalProps {
   onResetAppearance?: () => void;
   onShareLink: () => void;
   linkCopied: boolean;
+  hasUpdate?: boolean;
+  isUpdating?: boolean;
+  updateMessage?: string | null;
+  onApplyUpdate?: (forceReload?: boolean) => void;
   onClose: () => void;
 }
 
@@ -149,6 +156,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   fullscreenError = null,
   t,
   onChangeSettings,
+  onChangeTheme,
   onApplyStyleCode,
   onSetSleepTimer,
   onToggleFloating,
@@ -159,6 +167,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetAppearance,
   onShareLink,
   linkCopied,
+  hasUpdate = false,
+  isUpdating = false,
+  updateMessage = null,
+  onApplyUpdate,
   onClose,
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
@@ -320,6 +332,107 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="space-y-6 pt-5">
+          {/* App Update Button & Lime-Green Change Indicator */}
+          {onApplyUpdate && (
+            <section
+              className="p-4 rounded-2xl border space-y-3"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                borderColor: hasUpdate ? '#84CC16' : 'var(--divider-color)',
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                  <div className="relative mt-0.5 shrink-0">
+                    <RefreshCw className={`w-5 h-5 ${isUpdating ? 'animate-spin' : ''}`} />
+                    {hasUpdate && (
+                      <span
+                        aria-label="Hay cambios nuevos disponibles"
+                        className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full animate-pulse"
+                        style={{
+                          backgroundColor: '#A3E635',
+                          boxShadow: '0 0 8px rgba(163, 230, 53, 0.95)',
+                        }}
+                      />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-semibold">Actualizar</h3>
+                      {hasUpdate && (
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          style={{
+                            backgroundColor: 'rgba(163, 230, 53, 0.22)',
+                            color: 'var(--text-main)',
+                            border: '1px solid rgba(132, 204, 22, 0.6)',
+                          }}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: '#A3E635' }}
+                          />
+                          Nuevo cambio disponible
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {hasUpdate
+                        ? 'Hay cambios nuevos listos. Presiona Actualizar para recibirlos al instante sin desinstalar la app ni perder tus canciones o estilos.'
+                        : 'Recibe las novedades y cambios publicados en la app instalada con un toque, sin desinstalar ni volver a instalar.'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() => onApplyUpdate(false)}
+                  className="btn-raw relative min-h-[42px] px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shrink-0 transition active:scale-95 disabled:opacity-60"
+                  style={{
+                    backgroundColor: 'var(--accent-color)',
+                    color: '#1C1B1F',
+                  }}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isUpdating ? 'animate-spin' : ''}`} />
+                  <span>{isUpdating ? 'Actualizando…' : 'Actualizar'}</span>
+                  {hasUpdate && !isUpdating && (
+                    <span
+                      className="w-2.5 h-2.5 rounded-full animate-pulse"
+                      style={{
+                        backgroundColor: '#A3E635',
+                        boxShadow: '0 0 6px rgba(132, 204, 22, 0.95)',
+                      }}
+                    />
+                  )}
+                </button>
+              </div>
+
+              {updateMessage && (
+                <div
+                  className="px-3 py-2.5 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  <span className="leading-snug">{updateMessage}</span>
+                  <button
+                    type="button"
+                    onClick={() => onApplyUpdate(true)}
+                    className="btn-raw px-2.5 py-1 rounded-lg border text-[11px] font-semibold shrink-0"
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      borderColor: 'var(--divider-color)',
+                    }}
+                  >
+                    Recargar caché ahora
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+
           {/* App Language (also drives instant AI lyrics translation) */}
           <section>
             <div className="flex items-center gap-2 mb-3">
@@ -1669,6 +1782,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 176,
                 Math.max(56, settings.trackCardHeightPx ?? 118)
               );
+              const currentCardOpacity = Math.min(
+                100,
+                Math.max(15, theme.trackCardOpacity ?? 100)
+              );
+              const currentCardBlur = Math.min(
+                20,
+                Math.max(0, theme.trackCardBlur ?? 0)
+              );
               const widthPresets = [
                 { value: 64, label: 'Muy delgada' },
                 { value: 78, label: 'Delgada' },
@@ -1683,6 +1804,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 { value: 118, label: 'Larga' },
                 { value: 148, label: 'Muy larga' },
               ];
+              const surfacePresets = [
+                { label: 'Sólida', opacity: 100, blur: 0 },
+                { label: 'Translúcida', opacity: 72, blur: 5 },
+                { label: 'Borroso suave', opacity: 52, blur: 11 },
+                { label: 'Cristal etéreo', opacity: 32, blur: 16 },
+              ];
               return (
                 <>
                   <div className="flex items-start justify-between gap-3">
@@ -1690,10 +1817,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <Layers className="w-5 h-5 mt-0.5 shrink-0" />
                       <div>
                         <h3 className="text-sm font-semibold">
-                          Tamaño de las tarjetas (Ancho y Largo)
+                          Tarjetas de música (Tamaño, Opacidad y Borroso)
                         </h3>
                         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                          Ajusta por separado qué tan delgada/ancha y qué tan corta/larga se ve cada tarjeta de canción
+                          Ajusta el tamaño, transparencia y efecto cristal borroso suave de cada tarjeta de canción
                         </p>
                       </div>
                     </div>
@@ -1708,11 +1835,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </span>
                   </div>
 
-                  {/* Proportional Live Width + Length Preview */}
+                  {/* Proportional Live Width + Length + Opacity + Blur Preview */}
                   <div
                     className="p-3.5 rounded-2xl border flex justify-center"
                     style={{
                       backgroundColor: 'var(--bg-app)',
+                      backgroundImage:
+                        currentCardOpacity < 100 || currentCardBlur > 0
+                          ? 'radial-gradient(circle at 22% 35%, var(--accent-color) 0%, transparent 45%), radial-gradient(circle at 80% 70%, var(--accent-soft) 0%, transparent 50%)'
+                          : undefined,
                       borderColor: 'var(--divider-color)',
                     }}
                   >
@@ -1721,8 +1852,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       style={{
                         width: `${currentCardWidth}%`,
                         minHeight: `${currentCardHeight}px`,
-                        backgroundColor: 'var(--bg-elevated)',
+                        backgroundColor: applyOpacityToColorValue(
+                          'var(--bg-elevated)',
+                          currentCardOpacity
+                        ),
                         borderColor: 'var(--divider-color)',
+                        ...(currentCardBlur > 0
+                          ? {
+                              backdropFilter: `blur(${currentCardBlur}px)`,
+                              WebkitBackdropFilter: `blur(${currentCardBlur}px)`,
+                              boxShadow:
+                                'inset 0 1px 0 rgba(255,255,255,0.42), 0 6px 18px -6px rgba(0,0,0,0.1)',
+                            }
+                          : {}),
                       }}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -1736,7 +1878,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <div className="flex items-center justify-between gap-2 text-[10px]">
                         <span className="truncate" style={{ color: 'var(--text-muted)' }}>
-                          MoriNote · FLAC · 3:42
+                          MoriNote · FLAC · {currentCardOpacity}% · {currentCardBlur}px
                         </span>
                         <span aria-hidden="true" className="opacity-70 shrink-0">
                           ♡ ✎
@@ -1744,6 +1886,104 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* 0. Card Opacity & Soft Frosted Blur */}
+                  {onChangeTheme && (
+                    <div
+                      className="p-3 rounded-2xl border space-y-2.5"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+                        <span>Opacidad y borroso suave (medio transparente)</span>
+                        <span className="font-mono-nums" style={{ color: 'var(--text-muted)' }}>
+                          {currentCardOpacity}% · {currentCardBlur}px
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                        {surfacePresets.map((preset) => {
+                          const active =
+                            currentCardOpacity === preset.opacity &&
+                            currentCardBlur === preset.blur;
+                          return (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() =>
+                                onChangeTheme({
+                                  ...theme,
+                                  trackCardOpacity: preset.opacity,
+                                  trackCardBlur: preset.blur,
+                                })
+                              }
+                              className="btn-raw min-h-[36px] px-2 py-1.5 rounded-xl border text-[11px] font-semibold transition"
+                              style={{
+                                backgroundColor: active
+                                  ? 'var(--accent-soft)'
+                                  : 'var(--bg-surface)',
+                                borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                              }}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
+                        <label className="block space-y-1 text-xs">
+                          <div className="flex items-center justify-between text-[11px] font-medium">
+                            <span style={{ color: 'var(--text-muted)' }}>Opacidad</span>
+                            <span className="font-mono-nums">{currentCardOpacity}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={15}
+                            max={100}
+                            step={1}
+                            aria-label="Opacidad de las tarjetas de música"
+                            value={currentCardOpacity}
+                            onChange={(e) =>
+                              onChangeTheme({
+                                ...theme,
+                                trackCardOpacity: Number(e.target.value),
+                              })
+                            }
+                            className="w-full accent-current cursor-pointer"
+                          />
+                        </label>
+
+                        <label className="block space-y-1 text-xs">
+                          <div className="flex items-center justify-between text-[11px] font-medium">
+                            <span style={{ color: 'var(--text-muted)' }}>Borroso suave</span>
+                            <span className="font-mono-nums">{currentCardBlur}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={20}
+                            step={1}
+                            aria-label="Borroso suave de las tarjetas de música"
+                            value={currentCardBlur}
+                            onChange={(e) => {
+                              const nextBlur = Number(e.target.value);
+                              const nextOpacity =
+                                nextBlur > 0 && currentCardOpacity >= 96 ? 60 : currentCardOpacity;
+                              onChangeTheme({
+                                ...theme,
+                                trackCardBlur: nextBlur,
+                                trackCardOpacity: nextOpacity,
+                              });
+                            }}
+                            className="w-full accent-current cursor-pointer"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
 
                   {/* 1. Width (Ancho / Delgado) */}
                   <div className="space-y-2">
@@ -2366,6 +2606,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </section>
           </div>
+
+          {/* Ideas Credit Footer at the End of Ajustes */}
+          <footer
+            className="p-4 rounded-2xl border text-center space-y-1"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--divider-color)',
+            }}
+          >
+            <p className="text-xs font-bold tracking-tight">
+              MoriNote · 茉莉音
+            </p>
+            <p className="text-xs font-medium" style={{ color: 'var(--text-main)' }}>
+              Ideas por <span className="font-bold">Melissa</span>
+            </p>
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              Aportes creativos, diseño y detalles pensados para disfrutar la música
+            </p>
+          </footer>
         </div>
       </div>
 

@@ -430,7 +430,9 @@ function normalizeGeminiAudioMimeType(rawType: string): string | null {
   if (lower === 'audio/ogg') return 'audio/ogg';
   if (lower === 'audio/flac' || lower === 'audio/x-flac') return 'audio/flac';
   if (lower === 'audio/aac') return 'audio/aac';
-  if (lower === 'audio/mp4' || lower === 'audio/x-m4a' || lower === 'audio/m4a') return 'audio/mp4';
+  if (lower === 'audio/mp4' || lower === 'audio/x-m4a' || lower === 'audio/m4a' || lower === 'video/mp4') {
+    return 'audio/mp4';
+  }
   if (lower === 'audio/webm') return 'audio/webm';
   return null;
 }
@@ -453,14 +455,14 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 /**
  * Prepares the full song audio for Gemini AI transcription, pasted-lyrics timestamp alignment,
- * and complete translation. Sends compressed files <= 10 MB directly, or downsamples the full
- * track cleanly to a compact mono WAV fitting well within payload limits.
+ * and complete translation. Sends compact compressed files <= 4.5 MB directly, or downsamples the full
+ * track cleanly to a compact mono WAV fitting reliably within mobile/API payload limits.
  */
 export async function prepareAudioSnippetForAI(
   blob: Blob
 ): Promise<{ base64: string; mimeType: string; durationSec?: number } | null> {
   const normalizedMime = normalizeGeminiAudioMimeType(blob.type);
-  if (blob.size <= 10 * 1024 * 1024 && normalizedMime && normalizedMime !== 'audio/wav') {
+  if (blob.size <= 4.5 * 1024 * 1024 && normalizedMime && normalizedMime !== 'audio/wav') {
     const base64 = await blobToBase64(blob);
     return { base64, mimeType: normalizedMime };
   }
@@ -475,7 +477,7 @@ export async function prepareAudioSnippetForAI(
     await tempCtx.close();
 
     const fullDuration = Math.max(1, decoded.duration);
-    const maxWavBytes = 9.5 * 1024 * 1024;
+    const maxWavBytes = 4.2 * 1024 * 1024;
     const profiles: Array<{ rate: number; bits: 8 | 16 }> = [
       { rate: 16000, bits: 16 },
       { rate: 12000, bits: 16 },
@@ -509,7 +511,7 @@ export async function prepareAudioSnippetForAI(
     };
   } catch (err) {
     console.warn('Could not resample audio for AI:', err);
-    if (blob.size <= 12 * 1024 * 1024 && normalizedMime) {
+    if (blob.size <= 8 * 1024 * 1024 && normalizedMime) {
       const base64 = await blobToBase64(blob);
       return { base64, mimeType: normalizedMime };
     }

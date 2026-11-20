@@ -23,7 +23,18 @@
       name="twitter:description"
       content="Escucha tu música sin pérdida en tonos pastel con letras IA traducidas al instante, temas cute, sonidos ASMR y perfil personalizable."
     />
-    <meta name="theme-color" content="#FFF0F5" />
+    <meta name="theme-color" content="#FFF0F5" id="morinote-theme-color" />
+    <script>
+      try {
+        var savedBg = localStorage.getItem('morinote_last_bg_v1');
+        if (savedBg && /^#[0-9a-fA-F]{6}$/.test(savedBg)) {
+          var meta = document.getElementById('morinote-theme-color');
+          if (meta) meta.setAttribute('content', savedBg);
+          document.documentElement.style.backgroundColor = savedBg;
+          document.documentElement.style.setProperty('--bg-app', savedBg);
+        }
+      } catch (e) {}
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />

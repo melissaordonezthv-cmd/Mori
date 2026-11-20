@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import {
+  APP_TITLE_COLOR_PRESETS,
   BUTTON_THEMES,
   DEFAULT_COVER_SAKURA,
   DIVIDER_SWATCHES,
@@ -52,6 +53,7 @@ interface ThemeModalProps {
 type SectionKey =
   | 'bg'
   | 'player'
+  | 'appTitle'
   | 'bar'
   | 'songTitle'
   | 'banner'
@@ -64,6 +66,7 @@ type SectionKey =
 type SubListKey =
   | 'bgColors'
   | 'playerColors'
+  | 'appTitleColors'
   | 'barOutAnims'
   | 'barAnims'
   | 'barColors'
@@ -175,11 +178,34 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   const activeTitleColorMeta =
     SONG_TITLE_COLOR_PRESETS.find((c) => c.id === activeTitleColor) ?? SONG_TITLE_COLOR_PRESETS[0];
 
-  const cardPreview = getTrackCardPresentation(activeCardStyle, activeCardDecor, true, true, {
-    colorId: activeCardColor,
-    customBg: theme.trackCardCustomBg,
-    customText: theme.trackCardCustomText,
-  });
+  const activeAppTitleId = theme.appTitleColorId ?? 'auto';
+  const activeAppTitleMeta =
+    APP_TITLE_COLOR_PRESETS.find((c) => c.id === activeAppTitleId) ?? APP_TITLE_COLOR_PRESETS[0];
+  const appTitlePreviewColor =
+    activeAppTitleId === 'custom'
+      ? theme.appTitleCustomHex || 'var(--text-main)'
+      : activeAppTitleMeta.hex === 'auto' || activeAppTitleMeta.hex === 'custom'
+        ? 'var(--text-main)'
+        : activeAppTitleMeta.hex;
+
+  const activeCardOpacity = Math.min(100, Math.max(15, theme.trackCardOpacity ?? 100));
+  const activeCardBlur = Math.min(20, Math.max(0, theme.trackCardBlur ?? 0));
+
+  const cardPreview = getTrackCardPresentation(
+    activeCardStyle,
+    activeCardDecor,
+    true,
+    true,
+    {
+      colorId: activeCardColor,
+      customBg: theme.trackCardCustomBg,
+      customText: theme.trackCardCustomText,
+    },
+    {
+      opacityPercent: activeCardOpacity,
+      blurPx: activeCardBlur,
+    }
+  );
 
   const isSectionOpen = (key: SectionKey) => !isCompactMode || Boolean(openSections[key]);
   const toggleSection = (key: SectionKey) => {
@@ -378,6 +404,12 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
     6,
     isSubExpanded('songTitleColors'),
     (c) => c.id === activeTitleColor
+  );
+  const appTitleColorSlice = sliceWithActive(
+    APP_TITLE_COLOR_PRESETS,
+    8,
+    isSubExpanded('appTitleColors'),
+    (c) => c.id === activeAppTitleId
   );
 
   return (
@@ -975,6 +1007,127 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
             )}
           </section>
 
+          {/* 3c. App Header Title ("MoriNote · 茉莉音") Color */}
+          <section
+            className={isCompactMode ? 'rounded-2xl border overflow-hidden' : 'pt-2'}
+            style={
+              isCompactMode
+                ? { backgroundColor: 'var(--bg-surface)', borderColor: 'var(--divider-color)' }
+                : undefined
+            }
+          >
+            {renderSectionHeader(
+              'appTitle',
+              'Título de la app (MoriNote)',
+              activeAppTitleMeta.label,
+              <span
+                className="w-7 h-7 rounded-full border shrink-0 flex items-center justify-center text-xs font-extrabold"
+                style={{
+                  background:
+                    activeAppTitleId === 'custom'
+                      ? theme.appTitleCustomHex || 'var(--bg-elevated)'
+                      : activeAppTitleMeta.preview,
+                  borderColor: 'rgba(128,128,128,0.35)',
+                  color:
+                    activeAppTitleId === 'auto'
+                      ? 'var(--bg-app)'
+                      : isLightHexColor(
+                            activeAppTitleId === 'custom'
+                              ? theme.appTitleCustomHex
+                              : activeAppTitleMeta.hex
+                          )
+                        ? '#1C1B1F'
+                        : '#FFFFFF',
+                }}
+              >
+                M
+              </span>,
+              `${APP_TITLE_COLOR_PRESETS.length} tonos`
+            )}
+            {isSectionOpen('appTitle') && (
+              <div
+                className={isCompactMode ? 'px-4 pb-4 pt-3 border-t space-y-3' : 'space-y-3'}
+                style={{ borderColor: 'var(--divider-color)' }}
+              >
+                <div
+                  className="px-4 py-3 rounded-2xl border flex items-center justify-between gap-3"
+                  style={{
+                    backgroundColor: 'var(--bg-app)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  <span
+                    className="text-base font-extrabold tracking-tight font-display truncate"
+                    style={{ color: appTitlePreviewColor }}
+                  >
+                    MoriNote · 茉莉音
+                  </span>
+                  <span className="text-[11px] shrink-0" style={{ color: 'var(--text-muted)' }}>
+                    Vista en barra superior
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                  {appTitleColorSlice.visible.map((cp) => {
+                    const selected = activeAppTitleId === cp.id;
+                    return (
+                      <button
+                        key={cp.id}
+                        type="button"
+                        onClick={() => onChange({ ...theme, appTitleColorId: cp.id })}
+                        className="btn-raw min-h-[38px] px-2 py-1.5 rounded-xl border flex items-center gap-2 text-[11px] font-medium transition"
+                        style={{
+                          backgroundColor: selected ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                          borderColor: selected ? 'var(--text-main)' : 'var(--divider-color)',
+                        }}
+                      >
+                        <span
+                          className="w-4 h-4 rounded-full border shrink-0 flex items-center justify-center"
+                          style={{
+                            background: cp.preview,
+                            borderColor: 'rgba(128,128,128,0.35)',
+                          }}
+                        >
+                          {selected && cp.id !== 'custom' && cp.id !== 'auto' && (
+                            <Check
+                              className="w-2.5 h-2.5"
+                              style={{
+                                color: isLightHexColor(cp.hex) ? '#1C1B1F' : '#FFFFFF',
+                              }}
+                            />
+                          )}
+                        </span>
+                        <span className="truncate">{cp.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {renderExpandButton(
+                  'appTitleColors',
+                  APP_TITLE_COLOR_PRESETS.length,
+                  appTitleColorSlice.hasMore,
+                  'colores'
+                )}
+
+                {activeAppTitleId === 'custom' && (
+                  <div className="pt-1 flex items-center gap-3 text-xs">
+                    <label className="flex items-center gap-2 font-medium">
+                      <span>Elige tu tono exacto:</span>
+                      <input
+                        type="color"
+                        value={theme.appTitleCustomHex || '#8D5B38'}
+                        onChange={(e) =>
+                          onChange({ ...theme, appTitleCustomHex: e.target.value })
+                        }
+                        className="w-8 h-8 rounded-lg border cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
           {/* 4. Theme-only Editable Decorative Library Banner */}
           <section
             className={isCompactMode ? 'rounded-2xl border overflow-hidden' : 'pt-2'}
@@ -1172,21 +1325,46 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                 className={isCompactMode ? 'px-4 pb-4 pt-3 border-t space-y-4' : 'space-y-4'}
                 style={{ borderColor: 'var(--divider-color)' }}
               >
-                {/* Live Preview Song Card */}
+                {/* Live Preview Song Card (with soft backdrop pattern so transparency & blur show clearly) */}
                 <div
-                  className="p-3.5 rounded-2xl border"
+                  className="relative overflow-hidden p-3.5 rounded-2xl border"
                   style={{
                     backgroundColor: 'var(--bg-app)',
+                    backgroundImage:
+                      activeCardOpacity < 100 || activeCardBlur > 0
+                        ? 'radial-gradient(circle at 18% 30%, var(--accent-color) 0%, transparent 45%), radial-gradient(circle at 82% 72%, var(--accent-soft) 0%, transparent 50%)'
+                        : undefined,
                     borderColor: 'var(--divider-color)',
                   }}
                 >
-                  <p className="text-[11px] font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
-                    Vista previa de tarjeta
-                  </p>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                      Vista previa de tarjeta
+                    </p>
+                    {(activeCardOpacity < 100 || activeCardBlur > 0) && (
+                      <span
+                        className="text-[10px] font-mono-nums px-2 py-0.5 rounded-lg border"
+                        style={{
+                          backgroundColor: 'var(--bg-elevated)',
+                          borderColor: 'var(--divider-color)',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        {activeCardOpacity}% · {activeCardBlur}px borroso
+                      </span>
+                    )}
+                  </div>
                   <div
                     className={cardPreview.containerClassName}
                     style={{
                       ...cardPreview.containerStyle,
+                      ...(cardPreview.isGroupedList && activeCardBlur > 0
+                        ? {
+                            backdropFilter: `blur(${activeCardBlur}px)`,
+                            WebkitBackdropFilter: `blur(${activeCardBlur}px)`,
+                            borderRadius: '1rem',
+                          }
+                        : {}),
                       color: cardPreview.textColorOverride || 'var(--text-main)',
                     }}
                   >
@@ -1228,6 +1406,110 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
                         ♥
                       </span>
                     </div>
+                  </div>
+                </div>
+
+                {/* Card Opacity & Soft Frosted Blur */}
+                <div
+                  className="p-3.5 rounded-2xl border space-y-3"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold">Opacidad y borroso suave (cristal)</p>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        Hazlas medio transparentes con vidrio suave para ver tu fondo detrás
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {[
+                      { label: 'Sólida', opacity: 100, blur: 0 },
+                      { label: 'Translúcida', opacity: 72, blur: 5 },
+                      { label: 'Borroso suave', opacity: 52, blur: 11 },
+                      { label: 'Cristal etéreo', opacity: 32, blur: 16 },
+                    ].map((preset) => {
+                      const active =
+                        activeCardOpacity === preset.opacity && activeCardBlur === preset.blur;
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() =>
+                            onChange({
+                              ...theme,
+                              trackCardOpacity: preset.opacity,
+                              trackCardBlur: preset.blur,
+                            })
+                          }
+                          className="btn-raw min-h-[36px] px-2 py-1.5 rounded-xl border text-[11px] font-semibold transition"
+                          style={{
+                            backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                            borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
+                          }}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <label className="block space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Opacidad del fondo</span>
+                        <span className="font-mono-nums" style={{ color: 'var(--text-muted)' }}>
+                          {activeCardOpacity}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={15}
+                        max={100}
+                        step={1}
+                        aria-label="Opacidad de las tarjetas de música"
+                        value={activeCardOpacity}
+                        onChange={(e) =>
+                          onChange({
+                            ...theme,
+                            trackCardOpacity: Number(e.target.value),
+                          })
+                        }
+                        className="w-full accent-current cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="block space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Borroso suave</span>
+                        <span className="font-mono-nums" style={{ color: 'var(--text-muted)' }}>
+                          {activeCardBlur}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={20}
+                        step={1}
+                        aria-label="Desenfoque borroso suave de las tarjetas de música"
+                        value={activeCardBlur}
+                        onChange={(e) => {
+                          const nextBlur = Number(e.target.value);
+                          const nextOpacity =
+                            nextBlur > 0 && activeCardOpacity >= 96 ? 60 : activeCardOpacity;
+                          onChange({
+                            ...theme,
+                            trackCardBlur: nextBlur,
+                            trackCardOpacity: nextOpacity,
+                          });
+                        }}
+                        className="w-full accent-current cursor-pointer"
+                      />
+                    </label>
                   </div>
                 </div>
 

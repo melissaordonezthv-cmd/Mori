@@ -161,6 +161,12 @@ export function decodeStyleCode(
     if (typeof incomingTheme.backgroundColorId !== 'string') {
       cleanTheme.backgroundColorId = currentTheme.backgroundColorId;
     }
+    if (typeof incomingTheme.trackCardOpacity === 'number') {
+      cleanTheme.trackCardOpacity = Math.min(100, Math.max(15, Math.round(incomingTheme.trackCardOpacity)));
+    }
+    if (typeof incomingTheme.trackCardBlur === 'number') {
+      cleanTheme.trackCardBlur = Math.min(20, Math.max(0, Math.round(incomingTheme.trackCardBlur)));
+    }
 
     const incomingProfile = parsed.profileStyle;
     const nextProfile: ProfileConfig = {

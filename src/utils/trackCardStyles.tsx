@@ -8,6 +8,11 @@ export interface TrackCardColorConfig {
   customText?: string;
 }
 
+export interface TrackCardSurfaceConfig {
+  opacityPercent?: number;
+  blurPx?: number;
+}
+
 export interface TrackCardPresentation {
   isGroupedList: boolean;
   containerClassName: string;
@@ -82,15 +87,54 @@ function resolveColorOverride(
   };
 }
 
+export function applyOpacityToColorValue(value: string, opacityPercent: number): string {
+  const clampedPct = Math.min(100, Math.max(15, opacityPercent));
+  if (clampedPct >= 100) return value;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === 'transparent' || trimmed === 'none') return value;
+
+  const alpha = clampedPct / 100;
+  const alphaRounded = Math.round(alpha * 1000) / 1000;
+
+  return trimmed.replace(
+    /rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)|#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|var\(--[a-zA-Z0-9_-]+\)/g,
+    (token, r, g, b, a) => {
+      if (token.startsWith('var(')) {
+        return `color-mix(in srgb, ${token} ${Math.round(clampedPct)}%, transparent)`;
+      }
+      if (token.startsWith('#')) {
+        const raw = token.slice(1);
+        const full =
+          raw.length === 3
+            ? raw
+                .split('')
+                .map((ch) => ch + ch)
+                .join('')
+            : raw;
+        const nr = parseInt(full.slice(0, 2), 16);
+        const ng = parseInt(full.slice(2, 4), 16);
+        const nb = parseInt(full.slice(4, 6), 16);
+        return `rgba(${nr}, ${ng}, ${nb}, ${alphaRounded})`;
+      }
+      const baseAlpha = a !== undefined ? parseFloat(a) : 1;
+      const nextAlpha = Math.round(baseAlpha * alpha * 1000) / 1000;
+      return `rgba(${r}, ${g}, ${b}, ${nextAlpha})`;
+    }
+  );
+}
+
 export function getTrackCardPresentation(
   styleId: TrackCardStyleId = 'classic_row',
   decorId: TrackCardDecorId = 'auto',
   isCurrent: boolean,
   isFirstInList: boolean,
-  colorConfig?: TrackCardColorConfig
+  colorConfig?: TrackCardColorConfig,
+  surfaceConfig?: TrackCardSurfaceConfig
 ): TrackCardPresentation {
   const decorBadge = resolveTrackCardDecor(styleId, decorId);
   const customPalette = resolveColorOverride(colorConfig);
+  const opacityPct = Math.min(100, Math.max(15, surfaceConfig?.opacityPercent ?? 100));
+  const blurPx = Math.min(20, Math.max(0, surfaceConfig?.blurPx ?? 0));
 
   if (styleId === 'classic_row') {
     const classicBg = customPalette
@@ -101,6 +145,8 @@ export function getTrackCardPresentation(
         ? 'var(--accent-soft)'
         : 'transparent';
 
+    const resolvedClassicBg = applyOpacityToColorValue(classicBg, opacityPct);
+
     return {
       isGroupedList: true,
       containerClassName:
@@ -109,7 +155,7 @@ export function getTrackCardPresentation(
         borderTopWidth: isFirstInList ? 0 : '1.5px',
         borderTopStyle: 'solid',
         borderTopColor: customPalette ? customPalette.border : 'var(--divider-color)',
-        backgroundColor: classicBg,
+        backgroundColor: resolvedClassicBg,
       },
       coverClassName: 'w-12 h-12 rounded-xl',
       textColorOverride: customPalette?.text,
@@ -507,6 +553,37 @@ export function getTrackCardPresentation(
     };
     textColorOverride = customPalette.text;
     mutedColorOverride = customPalette.muted;
+  }
+
+  // Apply user-configured card background opacity & soft frosted glass blur
+  // (applied strictly to card background/filter so title, cover, and buttons remain 100% crisp)
+  if (opacityPct < 100) {
+    if (typeof containerStyle.background === 'string' && containerStyle.background) {
+      containerStyle = {
+        ...containerStyle,
+        background: applyOpacityToColorValue(containerStyle.background, opacityPct),
+      };
+    } else if (
+      typeof containerStyle.backgroundColor === 'string' &&
+      containerStyle.backgroundColor
+    ) {
+      containerStyle = {
+        ...containerStyle,
+        backgroundColor: applyOpacityToColorValue(containerStyle.backgroundColor, opacityPct),
+      };
+    }
+  }
+
+  if (blurPx > 0) {
+    const blurValue = `blur(${blurPx}px)`;
+    containerStyle = {
+      ...containerStyle,
+      backdropFilter: blurValue,
+      WebkitBackdropFilter: blurValue,
+      boxShadow:
+        containerStyle.boxShadow ||
+        'inset 0 1px 0 rgba(255,255,255,0.42), 0 6px 18px -6px rgba(0,0,0,0.1)',
+    };
   }
 
   return {

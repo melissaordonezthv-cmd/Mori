@@ -22,6 +22,7 @@ import {
 } from './components/WallpaperAndFiltersLayer';
 import { UI_TEXT } from './constants/i18n';
 import {
+  APP_TITLE_COLOR_PRESETS,
   DEFAULT_AVATAR_URL,
   DEFAULT_BANNER_URL,
   DIVIDER_SWATCHES,
@@ -32,6 +33,7 @@ import {
   SURFACE_SWATCHES,
   TEXT_SWATCHES,
 } from './constants/themes';
+import { useAppUpdate } from './hooks/useAppUpdate';
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { useFloatingMiniPlayer } from './hooks/useFloatingMiniPlayer';
 import type {
@@ -97,6 +99,8 @@ const DEFAULT_THEME: ThemeConfig = {
   playerColorId: 'rosa',
   dividerColorId: 'rosa',
   textColorId: 'negro',
+  appTitleColorId: 'auto',
+  appTitleCustomHex: '',
   songBarColorId: 'auto',
   songBarAnimationId: 'shimmer_glow',
   songTitleShapeId: 'cloud_plush',
@@ -108,6 +112,8 @@ const DEFAULT_THEME: ThemeConfig = {
   trackCardColorId: 'auto',
   trackCardCustomBg: '',
   trackCardCustomText: '',
+  trackCardOpacity: 100,
+  trackCardBlur: 0,
   buttonThemeId: 'soft_pill',
   buttonCustomBg: '',
   buttonCustomText: '',
@@ -321,6 +327,17 @@ export default function App() {
     if (!sw || sw.id === 'auto') return playerSwatch.accent;
     return sw.color;
   }, [theme.songBarColorId, playerSwatch.accent]);
+  const appTitleColor = useMemo(() => {
+    const titleId = theme.appTitleColorId ?? 'auto';
+    if (titleId === 'custom') {
+      return theme.appTitleCustomHex || 'var(--text-main)';
+    }
+    const preset = APP_TITLE_COLOR_PRESETS.find((c) => c.id === titleId);
+    if (!preset || preset.hex === 'auto' || preset.hex === 'custom') {
+      return 'var(--text-main)';
+    }
+    return preset.hex;
+  }, [theme.appTitleColorId, theme.appTitleCustomHex]);
 
   useEffect(() => {
     writeStored(STORAGE_THEME_KEY, theme);
@@ -469,7 +486,9 @@ export default function App() {
     onTrackPlayed: handleTrackPlayed,
   });
 
-  // Apply CSS variables to :root
+  const appUpdate = useAppUpdate();
+
+  // Apply CSS variables and dynamic browser edge theme-color whenever theme updates
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty('--bg-app', bgSwatch.bgApp);
@@ -481,6 +500,20 @@ export default function App() {
     root.style.setProperty('--text-main', textSwatch.hex);
     root.style.setProperty('--text-muted', textSwatch.mutedHex);
     root.style.setProperty('--divider-color', dividerSwatch.color);
+
+    root.style.backgroundColor = bgSwatch.bgApp;
+    document.body.style.backgroundColor = bgSwatch.bgApp;
+    root.style.colorScheme = bgSwatch.isDark ? 'dark' : 'light';
+
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute('content', bgSwatch.bgApp);
+    }
+    try {
+      localStorage.setItem('morinote_last_bg_v1', bgSwatch.bgApp);
+    } catch {
+      // Ignore storage quota errors
+    }
 
     const mood = audio.currentTrack?.lyrics?.mood;
     if (theme.moodSyncEnabled && mood) {
@@ -861,9 +894,18 @@ export default function App() {
         }),
       });
 
-      const data = await res.json();
+      const rawResText = await res.text();
+      let data: Record<string, any> = {};
+      try {
+        data = rawResText ? JSON.parse(rawResText) : {};
+      } catch {
+        data = {};
+      }
       if (!res.ok) {
-        throw new Error(data.error || 'No se pudo analizar la letra con la IA.');
+        throw new Error(
+          data.error ||
+            `No se pudo analizar la letra con la IA (código ${res.status}). Intenta nuevamente.`
+        );
       }
 
       const updated: AudioTrack = {
@@ -929,8 +971,18 @@ export default function App() {
           artist: track.artist,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error traduciendo letra');
+      const rawResText = await res.text();
+      let data: Record<string, any> = {};
+      try {
+        data = rawResText ? JSON.parse(rawResText) : {};
+      } catch {
+        data = {};
+      }
+      if (!res.ok) {
+        throw new Error(
+          data.error || `Error traduciendo la letra (código ${res.status}). Intenta nuevamente.`
+        );
+      }
 
       const updated: AudioTrack = {
         ...track,
@@ -1097,11 +1149,29 @@ export default function App() {
         >
           {/* Corner Three-Line Menu + Brand */}
           <div className="flex items-center gap-3 min-w-0">
-            <HamburgerMenu t={t} onSelect={(panel) => setActiveModal(panel)} />
+            <HamburgerMenu
+              t={t}
+              hasUpdate={appUpdate.hasUpdate}
+              onSelect={(panel) => {
+                if (panel === 'settings') {
+                  void appUpdate.checkForUpdates(false);
+                }
+                setActiveModal(panel);
+              }}
+            />
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-xl font-extrabold tracking-tight truncate font-display">
+              <h1
+                className="text-base sm:text-xl font-extrabold tracking-tight leading-tight truncate font-display transition-colors"
+                style={{ color: appTitleColor }}
+              >
                 MoriNote · 茉莉音
               </h1>
+              <p
+                className="text-[10px] sm:text-[11px] font-medium leading-tight truncate opacity-80"
+                style={{ color: appTitleColor }}
+              >
+                Ideas por Melissa
+              </p>
             </div>
           </div>
 
@@ -1197,6 +1267,8 @@ export default function App() {
             trackCardColorId={theme.trackCardColorId ?? 'auto'}
             trackCardCustomBg={theme.trackCardCustomBg}
             trackCardCustomText={theme.trackCardCustomText}
+            trackCardOpacity={theme.trackCardOpacity ?? 100}
+            trackCardBlur={theme.trackCardBlur ?? 0}
             songTitleShapeId={theme.songTitleShapeId ?? 'cloud_plush'}
             songTitleColorId={theme.songTitleColorId ?? 'auto'}
             songTitleCustomBg={theme.songTitleCustomBg}
@@ -1453,6 +1525,7 @@ export default function App() {
         fullscreenError={fullscreenError}
         t={t}
         onChangeSettings={setSettings}
+        onChangeTheme={setTheme}
         onApplyStyleCode={handleApplyStyleCode}
         onSetSleepTimer={(mins, onEnd) => {
           audio.setSleepMinutesRemaining(mins);
@@ -1466,7 +1539,14 @@ export default function App() {
         onResetAppearance={handleResetAppearance}
         onShareLink={handleShareLink}
         linkCopied={linkCopied}
-        onClose={() => setActiveModal(null)}
+        hasUpdate={appUpdate.hasUpdate}
+        isUpdating={appUpdate.isUpdating}
+        updateMessage={appUpdate.updateMessage}
+        onApplyUpdate={appUpdate.applyUpdate}
+        onClose={() => {
+          appUpdate.clearUpdateMessage();
+          setActiveModal(null);
+        }}
       />
 
       {/* Quick Optional Screen Filter Switcher Only Shown During Fullscreen Mode */}

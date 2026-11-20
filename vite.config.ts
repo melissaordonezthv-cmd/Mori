@@ -5,13 +5,18 @@ import path from 'path';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
+  const appBuildId = command === 'build' ? `build-${Date.now().toString(36)}` : 'dev';
+
   return {
+    define: {
+      __APP_BUILD_ID__: JSON.stringify(appBuildId),
+    },
     plugins: [
       react(),
       tailwindcss(),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         includeAssets: ['icon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
           id: '/',
@@ -46,9 +51,15 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          cleanupOutdatedCaches: true,
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+          navigateFallbackDenylist: [/^\/api\//],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,jpg}'],
           runtimeCaching: [
+            {
+              urlPattern: /^\/api\/.*/i,
+              handler: 'NetworkOnly',
+            },
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: 'CacheFirst',
@@ -85,7 +96,7 @@ export default defineConfig(() => {
         },
       }),
       {
-        name: 'copy-unbundled-src-assets',
+        name: 'copy-unbundled-src-assets-and-version',
         apply: 'build',
         closeBundle(error?: Error): void {
           if (error) {
@@ -94,8 +105,18 @@ export default defineConfig(() => {
           const distDir = path.resolve(__dirname, 'dist');
           const srcAssets = path.resolve(__dirname, 'src/assets');
           const distAssets = path.resolve(distDir, 'src/assets');
-          if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
-            fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
+          if (fs.existsSync(distDir)) {
+            if (fs.existsSync(srcAssets)) {
+              fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
+            }
+            fs.writeFileSync(
+              path.join(distDir, 'app-version.json'),
+              JSON.stringify({
+                buildId: appBuildId,
+                builtAt: new Date().toISOString(),
+              }),
+              'utf-8'
+            );
           }
         },
       },

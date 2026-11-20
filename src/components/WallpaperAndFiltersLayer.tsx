@@ -478,39 +478,60 @@ const InteractiveFluidOverlayCanvas: React.FC<{
     resize();
     window.addEventListener('resize', resize);
 
-    // Tilt / motion / pointer state
-    let targetTiltX = 0;
-    let targetTiltY = 0;
+    // Smooth tilt / motion / pointer state (frame-rate independent, no abrupt spikes)
+    let rawTiltX = 0;
+    let rawTiltY = 0;
+    let pointerTiltX = 0;
+    let pointerTiltY = 0;
+    let lastPointerMs = 0;
+    let hasOrientation = false;
+    let lastOrientationMs = 0;
     let curTiltX = 0;
     let curTiltY = 0;
-    let prevTiltX = 0;
     let sloshAngle = 0;
     let sloshVelocity = 0;
+    let wavePhase = 0;
+    let smoothEnergy = 0;
 
     const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (typeof e.gamma === 'number' || typeof e.beta === 'number') {
+        hasOrientation = true;
+        lastOrientationMs = performance.now();
+      }
       if (typeof e.gamma === 'number') {
-        targetTiltX = Math.max(-1, Math.min(1, e.gamma / 42));
+        const nextX = Math.max(-1, Math.min(1, e.gamma / 50));
+        rawTiltX = rawTiltX * 0.72 + nextX * 0.28;
       }
       if (typeof e.beta === 'number') {
-        targetTiltY = Math.max(-1, Math.min(1, (e.beta - 38) / 42));
+        const nextY = Math.max(-1, Math.min(1, (e.beta - 38) / 48));
+        rawTiltY = rawTiltY * 0.72 + nextY * 0.28;
       }
     };
 
     const handleDeviceMotion = (e: DeviceMotionEvent) => {
+      // Only act as a heavily smoothed fallback when orientation events aren't active
+      if (hasOrientation && performance.now() - lastOrientationMs < 500) return;
       const acc = e.accelerationIncludingGravity;
       if (acc && typeof acc.x === 'number') {
         const gX = Math.max(-1, Math.min(1, -acc.x / 9.8));
-        if (Math.abs(gX) > 0.05) {
-          targetTiltX = targetTiltX * 0.65 + gX * 0.35;
-        }
+        rawTiltX = rawTiltX * 0.88 + gX * 0.12;
+      }
+      if (acc && typeof acc.y === 'number') {
+        const gY = Math.max(-1, Math.min(1, (acc.y - 6.2) / 9.8));
+        rawTiltY = rawTiltY * 0.88 + gY * 0.12;
       }
     };
 
     const handlePointerMove = (e: PointerEvent) => {
+      // On touch devices with orientation sensors, avoid jerking the water on taps/scrolls
+      if (e.pointerType === 'touch' && hasOrientation) return;
       const nx = (e.clientX / Math.max(1, width) - 0.5) * 2;
       const ny = (e.clientY / Math.max(1, height) - 0.5) * 2;
-      targetTiltX = Math.max(-1, Math.min(1, nx * 0.55));
-      targetTiltY = Math.max(-1, Math.min(1, ny * 0.45));
+      const targetPX = Math.max(-0.45, Math.min(0.45, nx * 0.42));
+      const targetPY = Math.max(-0.35, Math.min(0.35, ny * 0.32));
+      pointerTiltX = pointerTiltX * 0.8 + targetPX * 0.2;
+      pointerTiltY = pointerTiltY * 0.8 + targetPY * 0.2;
+      lastPointerMs = performance.now();
     };
 
     window.addEventListener('deviceorientation', handleOrientation);
@@ -547,7 +568,7 @@ const InteractiveFluidOverlayCanvas: React.FC<{
       nx: ((i * 53 + 7) % 96) / 100 + 0.02,
       offset: (i * 0.19) % 1,
       r: 1.8 + (i % 4) * 1.1,
-      speed: 0.18 + (i % 3) * 0.09,
+      speed: 0.12 + (i % 3) * 0.06,
     }));
 
     const ripples: RippleWave[] = Array.from({ length: 6 }, (_, i) => ({
@@ -568,31 +589,42 @@ const InteractiveFluidOverlayCanvas: React.FC<{
 
     let lastTime = performance.now();
 
-    const drawFluidBottomPool = (tSec: number, dt: number) => {
-      const tiltDelta = targetTiltX - prevTiltX;
-      prevTiltX = targetTiltX;
-      sloshVelocity += tiltDelta * 4.2;
-      // Spring physics back toward target tilt angle
-      const targetAngle = curTiltX * 0.16;
-      const springForce = (targetAngle - sloshAngle) * 14 - sloshVelocity * 2.4;
-      sloshVelocity += springForce * dt;
-      sloshAngle += sloshVelocity * dt;
+    const drawFluidBottomPool = (dt: number) => {
+      // Softly damped liquid pendulum with gentle inertia (zero abrupt impulse spikes)
+      const targetAngle = curTiltX * 0.25;
+      const springForce = (targetAngle - sloshAngle) * 5.6 - sloshVelocity * 4.2;
+      sloshVelocity = Math.max(-0.85, Math.min(0.85, sloshVelocity + springForce * dt));
+      sloshAngle = Math.max(-0.34, Math.min(0.34, sloshAngle + sloshVelocity * dt));
 
-      const basePoolHeight = Math.max(74, height * (0.125 + Math.max(0, curTiltY) * 0.05));
+      // Continuous traveling phase & smoothly modulated surface swell
+      const targetEnergy = Math.min(1, Math.abs(sloshVelocity) * 1.45);
+      smoothEnergy += (targetEnergy - smoothEnergy) * (1 - Math.exp(-3.0 * dt));
+      wavePhase += dt * (1.25 + smoothEnergy * 1.15);
+
+      const basePoolHeight = Math.max(76, height * (0.132 + curTiltY * 0.046));
       const baseSurfaceY = height - basePoolHeight;
-      const tiltSpanY = -Math.tan(sloshAngle) * (width * 0.5);
+      const tiltSpanY = -Math.tan(sloshAngle) * (width * 0.48);
 
-      const segments = 28;
+      const segments = 36;
       const pts: Array<{ x: number; y: number }> = [];
+      const innerPts: Array<{ x: number; y: number }> = [];
       for (let i = 0; i <= segments; i++) {
         const u = i / segments;
         const x = u * width;
         const linearY = baseSurfaceY + (u - 0.5) * 2 * tiltSpanY;
-        const wave1 = Math.sin(u * Math.PI * 3.2 + tSec * 2.3 + sloshAngle * 6) * (5 + Math.abs(sloshVelocity) * 14);
-        const wave2 = Math.cos(u * Math.PI * 5.6 - tSec * 1.7) * 2.6;
-        const wave3 = Math.sin(u * Math.PI * 9 - tSec * 3.1) * 1.1;
-        const y = Math.max(height * 0.58, Math.min(height - 16, linearY + wave1 + wave2 + wave3));
+        const wave1 =
+          Math.sin(u * Math.PI * 2.4 + wavePhase) * (4.2 + smoothEnergy * 5.8);
+        const wave2 =
+          Math.cos(u * Math.PI * 4.1 - wavePhase * 0.72) * (2.2 + smoothEnergy * 2.4);
+        const wave3 = Math.sin(u * Math.PI * 6.8 + wavePhase * 1.32) * 0.9;
+        const y = Math.max(height * 0.58, Math.min(height - 18, linearY + wave1 + wave2 + wave3));
         pts.push({ x, y });
+
+        const innerY = Math.min(
+          height - 4,
+          y + 11 + Math.sin(u * Math.PI * 3.2 - wavePhase * 0.85) * 3.4
+        );
+        innerPts.push({ x, y: innerY });
       }
 
       ctx.save();
@@ -609,7 +641,7 @@ const InteractiveFluidOverlayCanvas: React.FC<{
       ctx.lineTo(width, height);
       ctx.closePath();
 
-      const waterGrad = ctx.createLinearGradient(0, baseSurfaceY - 20, 0, height);
+      const waterGrad = ctx.createLinearGradient(0, baseSurfaceY - 24, 0, height);
       waterGrad.addColorStop(0, 'rgba(255, 255, 255, 0.24)');
       waterGrad.addColorStop(0.35, 'rgba(255, 255, 255, 0.06)');
       waterGrad.addColorStop(0.8, 'rgba(255, 255, 255, 0.12)');
@@ -617,22 +649,19 @@ const InteractiveFluidOverlayCanvas: React.FC<{
       ctx.fillStyle = waterGrad;
       ctx.fill();
 
-      // Secondary deeper internal shimmer layer (double crystal refraction wave)
+      // Smooth deeper internal shimmer layer (smooth quadratic curve)
       ctx.beginPath();
       ctx.moveTo(0, height);
-      for (let i = 0; i <= segments; i++) {
-        const u = i / segments;
-        const x = u * width;
-        const y =
-          pts[i].y +
-          10 +
-          Math.sin(u * Math.PI * 4 - tSec * 2.0) * 4;
-        if (i === 0) ctx.lineTo(x, y);
-        else ctx.lineTo(x, y);
+      ctx.lineTo(innerPts[0].x, innerPts[0].y);
+      for (let i = 0; i < innerPts.length - 1; i++) {
+        const xc = (innerPts[i].x + innerPts[i + 1].x) * 0.5;
+        const yc = (innerPts[i].y + innerPts[i + 1].y) * 0.5;
+        ctx.quadraticCurveTo(innerPts[i].x, innerPts[i].y, xc, yc);
       }
+      ctx.lineTo(innerPts[innerPts.length - 1].x, innerPts[innerPts.length - 1].y);
       ctx.lineTo(width, height);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.11)';
       ctx.fill();
 
       // Crisp colorless crystal specular surface meniscus line
@@ -644,23 +673,27 @@ const InteractiveFluidOverlayCanvas: React.FC<{
         ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
       }
       ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.14)';
-      ctx.lineWidth = 3.6;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+      ctx.lineWidth = 3.4;
       ctx.stroke();
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.94)';
-      ctx.lineWidth = 2.1;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.75)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.lineWidth = 2.0;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.72)';
       ctx.shadowBlur = 7;
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // Tiny sparkling bubbles rising inside the bottom crystal pool
+      // Tiny sparkling bubbles rising smoothly inside the bottom crystal pool
+      const tSec = wavePhase * 0.7;
       for (const pb of poolBubbles) {
         const frac = (pb.offset + tSec * pb.speed) % 1;
-        const bx = ((pb.nx + curTiltX * 0.08 * (1 - frac) + 1) % 1) * width;
-        const segIdx = Math.min(segments, Math.max(0, Math.round((bx / width) * segments)));
-        const surfaceAtX = pts[segIdx].y;
+        const bx = ((pb.nx + curTiltX * 0.1 * (1 - frac) + 1) % 1) * width;
+        const segFloat = Math.min(segments, Math.max(0, (bx / Math.max(1, width)) * segments));
+        const idx0 = Math.floor(segFloat);
+        const idx1 = Math.min(segments, idx0 + 1);
+        const segBlend = segFloat - idx0;
+        const surfaceAtX = pts[idx0].y * (1 - segBlend) + pts[idx1].y * segBlend;
         const depth = Math.max(12, height - surfaceAtX);
         const by = height - frac * (depth - 6);
         drawCrystalWaterDroplet(ctx, bx, by, pb.r, 1);
@@ -736,19 +769,29 @@ const InteractiveFluidOverlayCanvas: React.FC<{
       lastTime = now;
       const tSec = now / 1000;
 
-      // Smoothly interpolate tilt
-      curTiltX += (targetTiltX - curTiltX) * 0.1;
-      curTiltY += (targetTiltY - curTiltY) * 0.1;
+      // Gently decay pointer bias when idle so resting phone tilt stays undisturbed
+      if (now - lastPointerMs > 1200) {
+        const decay = Math.exp(-1.1 * dt);
+        pointerTiltX *= decay;
+        pointerTiltY *= decay;
+      }
+
+      // Frame-rate-independent silky exponential smoothing
+      const desiredTiltX = Math.max(-1, Math.min(1, rawTiltX + pointerTiltX));
+      const desiredTiltY = Math.max(-1, Math.min(1, rawTiltY + pointerTiltY));
+      const tiltFollow = 1 - Math.exp(-3.1 * dt);
+      curTiltX += (desiredTiltX - curTiltX) * tiltFollow;
+      curTiltY += (desiredTiltY - curTiltY) * tiltFollow;
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
       ctx.globalAlpha = strength;
 
       if (filterId === 'fluid_bottom_water') {
-        drawFluidBottomPool(tSec, dt);
+        drawFluidBottomPool(dt);
       } else if (filterId === 'crystal_drops_tilt') {
         drawDropletsAndRain(dt, true);
-        drawFluidBottomPool(tSec, dt);
+        drawFluidBottomPool(dt);
       } else if (filterId === 'water_ripples') {
         // Concentric interactive water ripples reacting to tilt
         for (const rp of ripples) {

@@ -1,11 +1,13 @@
 import 'dotenv/config';
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const SERVER_BOOT_ID = Date.now().toString(36);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -114,8 +116,294 @@ function normalizeAndClampLines(
     .filter((l) => l.original.length > 0 || l.translated.length > 0);
 }
 
+function extractJsonObject<T = Record<string, unknown>>(rawText: string | undefined): T {
+  const cleaned = (rawText ?? '')
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  if (!cleaned) {
+    throw new Error('La respuesta de la IA llegó vacía.');
+  }
+
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)) as T;
+    }
+    throw new Error('No se pudo interpretar el formato de respuesta de la IA.');
+  }
+}
+
+function getErrorStatusAndFriendlyMessage(error: unknown): {
+  status: number;
+  message: string;
+  isTransient: boolean;
+  isAudioInvalidArg: boolean;
+} {
+  const raw = error instanceof Error ? error.message : String(error ?? 'Error desconocido');
+  const upper = raw.toUpperCase();
+
+  if (
+    upper.includes('PERMISSION_DENIED') ||
+    upper.includes('API_KEY_INVALID') ||
+    upper.includes('403') ||
+    upper.includes('NOT CONFIGURED')
+  ) {
+    return {
+      status: 403,
+      message:
+        'La clave de API de Gemini no es válida o no tiene permisos. Verifica tu clave en Settings > Secrets.',
+      isTransient: false,
+      isAudioInvalidArg: false,
+    };
+  }
+
+  if (upper.includes('RESOURCE_EXHAUSTED') || upper.includes('429')) {
+    return {
+      status: 429,
+      message: 'Se alcanzó temporalmente el límite de solicitudes de la IA. Intenta de nuevo en unos segundos.',
+      isTransient: true,
+      isAudioInvalidArg: false,
+    };
+  }
+
+  if (
+    upper.includes('UNAVAILABLE') ||
+    upper.includes('503') ||
+    upper.includes('504') ||
+    upper.includes('DEADLINE_EXCEEDED') ||
+    upper.includes('TIMED OUT') ||
+    upper.includes('TIMEOUT') ||
+    upper.includes('ECONNRESET') ||
+    upper.includes('FETCH FAILED')
+  ) {
+    return {
+      status: 503,
+      message: 'El servicio de IA está con alta demanda en este momento. Intenta de nuevo en unos segundos.',
+      isTransient: true,
+      isAudioInvalidArg: false,
+    };
+  }
+
+  const isInvalidArg = upper.includes('INVALID_ARGUMENT') || upper.includes('400');
+  if (isInvalidArg) {
+    return {
+      status: 400,
+      message: 'El formato de audio o los datos enviados no pudieron ser procesados por la IA.',
+      isTransient: false,
+      isAudioInvalidArg: true,
+    };
+  }
+
+  return {
+    status: 500,
+    message: raw.startsWith('{')
+      ? 'No se pudo completar la operación con la IA. Intenta nuevamente.'
+      : raw,
+    isTransient: upper.includes('INTERNAL') || upper.includes('500'),
+    isAudioInvalidArg: false,
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`TIMEOUT: ${label} exceeded ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function generateWithFallback(
+  ai: GoogleGenAI,
+  models: string[],
+  buildParams: (model: string) => Parameters<GoogleGenAI['models']['generateContent']>[0],
+  timeoutMs = 24000
+) {
+  let lastError: unknown;
+
+  for (let mIdx = 0; mIdx < models.length; mIdx++) {
+    const model = models[mIdx];
+    try {
+      return await withTimeout(
+        ai.models.generateContent(buildParams(model)),
+        timeoutMs,
+        model
+      );
+    } catch (err) {
+      lastError = err;
+      const info = getErrorStatusAndFriendlyMessage(err);
+      console.warn(`Gemini call failed [model=${model}]:`, info.message);
+      if (info.isAudioInvalidArg || (!info.isTransient && mIdx === models.length - 1)) {
+        throw err;
+      }
+      if (!info.isTransient) {
+        throw err;
+      }
+      await sleep(350);
+    }
+  }
+
+  throw lastError;
+}
+
+async function translateLinesInChunks(
+  ai: GoogleGenAI,
+  inputLines: Array<{ timeSec: number; original: string }>,
+  targetLangName: string,
+  title: string,
+  artist: string,
+  includeMood: boolean
+): Promise<{
+  moodLabel?: string;
+  moodDescription?: string;
+  lines: LyricLineOut[];
+}> {
+  const CHUNK_SIZE = 32;
+  const translatedTexts = new Array<string>(inputLines.length);
+  let moodLabel: string | undefined;
+  let moodDescription: string | undefined;
+
+  for (let start = 0; start < inputLines.length; start += CHUNK_SIZE) {
+    const chunk = inputLines.slice(start, start + CHUNK_SIZE);
+    const indexedChunk = chunk.map((l, offset) => ({
+      i: start + offset,
+      text: l.original,
+    }));
+    const askMood = includeMood && start === 0;
+
+    const response = await generateWithFallback(
+      ai,
+      ['gemini-3.1-flash-lite', 'gemini-4-hydrogen'],
+      (model) => ({
+        model,
+        contents: `Translate ALL ${indexedChunk.length} song lyric lines for "${title}" by "${artist}" completely, naturally, and poetically into ${targetLangName}.
+CRITICAL:
+- Translate EVERY single item "i" in the list completely into ${targetLangName} (never skip words, never leave fragments untranslated).
+- Return one object per index "i" with "t" set to the full translated line.${
+          askMood
+            ? `\n- Also provide a 2-3 word "moodLabel" and 1-sentence "moodDescription" in ${targetLangName}.`
+            : ''
+        }
+
+Lines JSON:
+${JSON.stringify(indexedChunk)}`,
+        config: {
+          systemInstruction: `You translate every song lyric line completely and faithfully into ${targetLangName}. Output valid JSON matching the schema with all ${indexedChunk.length} items.`,
+          thinkingConfig: {
+            thinkingLevel: model === 'gemini-3.1-flash-lite' ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW,
+          },
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              ...(askMood
+                ? {
+                    moodLabel: { type: Type.STRING },
+                    moodDescription: { type: Type.STRING },
+                  }
+                : {}),
+              items: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    i: { type: Type.INTEGER },
+                    t: { type: Type.STRING },
+                  },
+                  required: ['i', 't'],
+                },
+              },
+            },
+            required: askMood ? ['items', 'moodLabel', 'moodDescription'] : ['items'],
+          },
+        },
+      })
+    );
+
+    const parsed = extractJsonObject<{
+      moodLabel?: string;
+      moodDescription?: string;
+      items?: Array<{ i?: number; t?: string }>;
+    }>(response.text);
+
+    if (askMood) {
+      moodLabel = parsed.moodLabel;
+      moodDescription = parsed.moodDescription;
+    }
+
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+    for (let k = 0; k < items.length; k++) {
+      const item = items[k];
+      const idx =
+        typeof item?.i === 'number' && item.i >= start && item.i < start + chunk.length
+          ? item.i
+          : start + k;
+      if (idx >= 0 && idx < inputLines.length) {
+        const val = String(item?.t ?? '').trim();
+        if (val) translatedTexts[idx] = val;
+      }
+    }
+  }
+
+  return {
+    moodLabel,
+    moodDescription,
+    lines: inputLines.map((l, idx) => ({
+      timeSec: Number((Number.isFinite(Number(l.timeSec)) ? Number(l.timeSec) : 0).toFixed(2)),
+      original: l.original,
+      translated: translatedTexts[idx] || l.original,
+    })),
+  };
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'MoriNote' });
+});
+
+app.get('/api/app-version', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
+  let buildId = 'dev';
+  let builtAt: string | null = null;
+  if (process.env.NODE_ENV === 'production') {
+    const versionFile = path.resolve(__dirname, 'dist', 'app-version.json');
+    try {
+      if (fs.existsSync(versionFile)) {
+        const raw = JSON.parse(fs.readFileSync(versionFile, 'utf-8')) as {
+          buildId?: string;
+          builtAt?: string;
+        };
+        if (raw.buildId) buildId = raw.buildId;
+        if (raw.builtAt) builtAt = raw.builtAt;
+      }
+    } catch {
+      // Fallback to boot id if file is unreadable
+      buildId = SERVER_BOOT_ID;
+    }
+  }
+
+  res.json({
+    buildId,
+    bootId: SERVER_BOOT_ID,
+    builtAt,
+  });
 });
 
 app.post('/api/ai/analyze-lyrics', async (req, res) => {
@@ -136,10 +424,16 @@ app.post('/api/ai/analyze-lyrics', async (req, res) => {
     const trackDuration = Math.max(10, Math.round(Number(duration) || 180));
 
     const hasAudio = typeof audioBase64 === 'string' && audioBase64.length > 0;
+    const normalizedMime =
+      typeof mimeType === 'string' && mimeType
+        ? mimeType === 'video/mp4' || mimeType === 'audio/x-m4a' || mimeType === 'audio/m4a'
+          ? 'audio/mp4'
+          : mimeType
+        : 'audio/wav';
     const audioPart = hasAudio
       ? {
           inlineData: {
-            mimeType: typeof mimeType === 'string' && mimeType ? mimeType : 'audio/wav',
+            mimeType: normalizedMime,
             data: audioBase64,
           },
         }
@@ -151,90 +445,128 @@ app.post('/api/ai/analyze-lyrics', async (req, res) => {
 
     let transcribedDraft = '';
 
-    // Step 1: For automatic detection (no pasted lyrics), run full-track transcription first as a vocal draft.
-    // Audio is STILL passed to Step 2 so gemini-4-hydrogen listens directly to catch missed lines and align timestamps.
+    // Step 1: For automatic detection (no pasted lyrics), run audio transcription first as a vocal draft.
     if (!isManualSyncMode && audioPart) {
       try {
-        const transcriptionResponse = await ai.models.generateContent({
-          model: 'gemini-3.5-transcribe',
-          contents: {
-            parts: [
-              audioPart,
-              {
-                text: `Listen carefully to this ENTIRE audio track from 0:00 to the very end (${trackDuration} seconds).
-Transcribe EVERY single sung or spoken vocal line in its original language from start to finish.
-CRITICAL RULES:
-- Do NOT stop after the first few words or first verse.
-- Do NOT skip repeated choruses, pre-choruses, bridges, or outro lyrics.
-- Do NOT summarize or write placeholders like "[chorus]" or "[music]".
-- Output each sung phrase on its own line in chronological order.
-- Only if the entire track is 100% instrumental with zero sung or spoken words anywhere, reply strictly with [INSTRUMENTAL].`,
-              },
-            ],
-          },
-        });
+        const transcriptionResponse = await withTimeout(
+          ai.models.generateContent({
+            model: 'gemini-3.5-transcribe',
+            contents: {
+              parts: [
+                audioPart,
+                {
+                  text: `Listen carefully to this ENTIRE audio track from 0:00 to ${trackDuration}s.
+Transcribe EVERY single sung or spoken vocal line in its original language from start to finish in chronological order, one line per phrase.
+Do NOT stop after the first verse or skip repeated choruses.
+Only if the entire track is 100% instrumental with zero sung/spoken vocals anywhere, reply strictly with [INSTRUMENTAL].`,
+                },
+              ],
+            },
+          }),
+          22000,
+          'gemini-3.5-transcribe'
+        );
         transcribedDraft = (transcriptionResponse.text ?? '').trim();
       } catch (transcribeErr: unknown) {
         console.warn('Transcription step fallback to direct multimodal audio analysis:', transcribeErr);
       }
     }
 
-    // Step 2: Always give gemini-4-hydrogen the audio (if available) so it actually listens for synchronization,
-    // completes any missed vocals, detects language/mood, and translates 100% of every line into targetLanguage.
-    const promptParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
-    if (audioPart) {
-      promptParts.push(audioPart);
-    }
+    const buildAnalyzeParams = (model: string, attachAudio: boolean) => {
+      const promptParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+      if (attachAudio && audioPart) {
+        promptParts.push(audioPart);
+      }
 
-    const systemInstruction = isManualSyncMode
-      ? `You are a precision audio-lyric synchronizer and literary translator for MoriNote.
-Rules you MUST obey strictly:
-1. Never drop, merge, summarize, or omit ANY line from the user's pasted lyrics. Output ALL ${pastedEntries.length} lines in exact sequential order.
-2. Listen to the entire attached audio (0s to ${trackDuration}s) to determine exact vocal entry timestamps (skipping instrumental intros, breaks, and solos) so every line's "timeSec" matches when it is actually sung in the audio.
-3. Keep "original" matching the user's pasted line text.
-4. Translate EVERY SINGLE word and meaning of EVERY SINGLE line completely and naturally into ${targetLangName} in "translated" — never translate only a few words, never leave partial phrases untranslated, and never truncate.`
-      : `You are a complete song lyricist, audio-timestamp aligner, and literary translator for MoriNote.
-Rules you MUST obey strictly:
-1. Listen to the ENTIRE attached audio from 0s to ${trackDuration}s — never stop after the intro or first verse!
-2. If there are sung/spoken vocals anywhere in the track, transcribe EVERY line from start to finish (including all verses, choruses, repetitions, bridges, and outro) — even if the reference transcript draft was short or missed sections, YOU must listen directly to the full audio and include ALL sung lines.
-3. Translate EVERY SINGLE line completely, accurately, and naturally into ${targetLangName} in "translated" — never translate only a few words, never summarize, and never truncate.`;
+      if (isManualSyncMode) {
+        const formattedLines = pastedEntries
+          .map((entry) =>
+            entry.lrcTimeSec !== undefined
+              ? `[${entry.index}] (LRC hint: ${entry.lrcTimeSec}s) ${entry.text}`
+              : `[${entry.index}] ${entry.text}`
+          )
+          .join('\n');
 
-    if (isManualSyncMode) {
-      const formattedLines = pastedEntries
-        .map((entry) =>
-          entry.lrcTimeSec !== undefined
-            ? `[${entry.index}] (LRC hint: ${entry.lrcTimeSec}s) ${entry.text}`
-            : `[${entry.index}] ${entry.text}`
-        )
-        .join('\n');
-
-      promptParts.push({
-        text: `Track info:
+        promptParts.push({
+          text: `Track info:
 - Title: "${title}"
 - Artist: "${artist}"
 - Album: "${album}"
 - Full track duration in seconds: ${trackDuration}
 - Target translation language: ${targetLangName}
-- Audio attached: ${hasAudio ? 'YES — listen to the entire audio to align timestamps precisely to the real singing!' : 'NO — estimate realistic verse/chorus pacing across duration.'}
+- Audio attached: ${attachAudio && audioPart ? 'YES — listen to the entire audio to align timestamps precisely to the singing.' : 'NO — estimate realistic verse/chorus pacing across duration.'}
 
-USER-PASTED LYRICS (${pastedEntries.length} lines — synchronize ALL ${pastedEntries.length} lines in order and translate every line completely):
+USER-PASTED LYRICS (${pastedEntries.length} lines — synchronize ALL indices [0]..[${pastedEntries.length - 1}] in exact order and translate EVERY line completely):
 """
 ${formattedLines}
 """
 
 Tasks:
-1. Detect the true original language of the pasted lyrics ("detectedLanguage", e.g., "English", "Japanese", "Korean", "Spanish", "Chinese").
+1. Detect the true original language of the pasted lyrics ("detectedLanguage").
 2. Set "isInstrumental": false.
-3. Analyze the musical mood from the audio and lyrics: classify "mood" as one of "serene", "joyful", "melancholic", "energetic", "romantic", "dreamy", provide a 2-3 word "moodLabel" and 1-sentence "moodDescription" in ${targetLangName}, a soft pastel hex "suggestedAura" (like #F4B8CC, #A8D8EA, #B5E5CF, #F8C4B4, #C8BFE7, #F9E2AE), and "tempoFeeling" ("slow", "medium", "fast").
+3. Classify "mood" as one of "serene", "joyful", "melancholic", "energetic", "romantic", "dreamy", provide a 2-3 word "moodLabel" and 1-sentence "moodDescription" in ${targetLangName}, a soft pastel hex "suggestedAura", and "tempoFeeling" ("slow", "medium", "fast").
 4. Output "lines" with ALL ${pastedEntries.length} items in exact order [0]..[${pastedEntries.length - 1}]:
-   - "original": the exact pasted lyric line text (without the [index] prefix or LRC hint).
-   - "translated": complete, natural, full-sentence translation of the ENTIRE line into ${targetLangName}.
-   - "timeSec": ascending timestamp in seconds (within 0..${trackDuration}) aligned to when that exact line starts being sung in the audio (respecting instrumental intro/breaks/outro, or honoring LRC hints refined against the audio).`,
-      });
-    } else {
+   - "index": integer matching [0]..[${pastedEntries.length - 1}]
+   - "timeSec": ascending timestamp in seconds (within 0..${trackDuration}) when that line begins being sung
+   - "translated": complete, natural, full-sentence translation of that entire line into ${targetLangName} (translate every word, never truncate).`,
+        });
+
+        return {
+          model,
+          contents: { parts: promptParts },
+          config: {
+            systemInstruction: `You are a precision audio-lyric synchronizer and literary translator. Output ALL ${pastedEntries.length} indices in order, with accurate vocal entry timestamps and complete translations in ${targetLangName}.`,
+            thinkingConfig: {
+              thinkingLevel: model === 'gemini-3.1-flash-lite' ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW,
+            },
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                detectedLanguage: { type: Type.STRING },
+                isInstrumental: { type: Type.BOOLEAN },
+                mood: {
+                  type: Type.STRING,
+                  enum: ['serene', 'joyful', 'melancholic', 'energetic', 'romantic', 'dreamy'],
+                },
+                moodLabel: { type: Type.STRING },
+                moodDescription: { type: Type.STRING },
+                suggestedAura: { type: Type.STRING },
+                tempoFeeling: {
+                  type: Type.STRING,
+                  enum: ['slow', 'medium', 'fast'],
+                },
+                lines: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      index: { type: Type.INTEGER },
+                      timeSec: { type: Type.NUMBER },
+                      translated: { type: Type.STRING },
+                    },
+                    required: ['index', 'timeSec', 'translated'],
+                  },
+                },
+              },
+              required: [
+                'detectedLanguage',
+                'isInstrumental',
+                'mood',
+                'moodLabel',
+                'moodDescription',
+                'suggestedAura',
+                'tempoFeeling',
+                'lines',
+              ],
+            },
+          },
+        };
+      }
+
       const draftSection = transcribedDraft
-        ? `\nReference vocal draft (may be incomplete — cross-check directly against the FULL attached audio and add any missing verses, choruses, or lines you hear):\n"""\n${transcribedDraft}\n"""\n`
-        : '\nNo pre-extracted draft transcript; listen directly to the entire attached audio from beginning to end.\n';
+        ? `\nReference vocal draft (cross-check against the audio and include all verses, choruses, bridges, and outro):\n"""\n${transcribedDraft}\n"""\n`
+        : '\nListen directly to the audio from beginning to end.\n';
 
       promptParts.push({
         text: `Track info:
@@ -245,81 +577,155 @@ Tasks:
 - Target translation language: ${targetLangName}
 ${draftSection}
 Tasks:
-1. Determine the original language of the song (or "Instrumental" ONLY if the entire ${trackDuration}s audio truly has zero vocals).
-2. Analyze the musical mood and classify "mood" as one of: "serene", "joyful", "melancholic", "energetic", "romantic", "dreamy".
-3. Provide a 2-3 word "moodLabel" and a 1-sentence poetic "moodDescription" in ${targetLangName}.
-4. Provide a soft pastel hex "suggestedAura" (like #F4B8CC, #A8D8EA, #B5E5CF, #F8C4B4, #C8BFE7, #F9E2AE).
-5. Determine "tempoFeeling": "slow", "medium", or "fast".
-6. Output "lines":
-   - Listen through the ENTIRE song (0s to ${trackDuration}s). Output EVERY audible sung lyric line from beginning to end (do NOT stop after a few words or first verse; include repeated choruses and bridges in full).
-   - Set "original" to the complete lyric line in its original language, and "translated" to a COMPLETE, natural translation of the entire line into ${targetLangName}.
-   - Set ascending "timeSec" timestamps within 0..${trackDuration} matching when each line is actually sung in the audio.
-   - If the entire track is purely instrumental with zero vocals anywhere, set "isInstrumental": true and create 4-6 poetic ambient listening cues distributed across 0..${trackDuration}.`,
+1. Determine the original language of the song (or "Instrumental" ONLY if there are zero vocals anywhere).
+2. Classify "mood" as one of: "serene", "joyful", "melancholic", "energetic", "romantic", "dreamy", with 2-3 word "moodLabel" and 1-sentence "moodDescription" in ${targetLangName}, pastel hex "suggestedAura", and "tempoFeeling" ("slow", "medium", "fast").
+3. Output "lines" across 0..${trackDuration}s:
+   - Include EVERY audible sung lyric line from start to finish.
+   - Set "original" to the full lyric line in its original language, and "translated" to a COMPLETE, natural translation of the entire line into ${targetLangName}.
+   - Set ascending "timeSec" timestamps within 0..${trackDuration}.
+   - Only if 100% instrumental with zero vocals, set "isInstrumental": true and create 4-6 poetic listening cues.`,
       });
-    }
 
-    const structuredResponse = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
-      contents: { parts: promptParts },
-      config: {
-        systemInstruction,
-        thinkingConfig: {
-          thinkingLevel: isManualSyncMode ? ThinkingLevel.MEDIUM : ThinkingLevel.MEDIUM,
-        },
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            detectedLanguage: { type: Type.STRING },
-            isInstrumental: { type: Type.BOOLEAN },
-            mood: {
-              type: Type.STRING,
-              enum: ['serene', 'joyful', 'melancholic', 'energetic', 'romantic', 'dreamy'],
+      return {
+        model,
+        contents: { parts: promptParts },
+        config: {
+          systemInstruction: `You are a complete song lyricist, audio-timestamp aligner, and literary translator. Transcribe every sung line across the full song and translate every line completely into ${targetLangName}.`,
+            thinkingConfig: {
+              thinkingLevel: ThinkingLevel.LOW,
             },
-            moodLabel: { type: Type.STRING },
-            moodDescription: { type: Type.STRING },
-            suggestedAura: { type: Type.STRING },
-            tempoFeeling: {
-              type: Type.STRING,
-              enum: ['slow', 'medium', 'fast'],
-            },
-            lines: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  timeSec: { type: Type.NUMBER },
-                  original: { type: Type.STRING },
-                  translated: { type: Type.STRING },
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                detectedLanguage: { type: Type.STRING },
+                isInstrumental: { type: Type.BOOLEAN },
+                mood: {
+                  type: Type.STRING,
+                  enum: ['serene', 'joyful', 'melancholic', 'energetic', 'romantic', 'dreamy'],
                 },
-                required: ['timeSec', 'original', 'translated'],
+                moodLabel: { type: Type.STRING },
+                moodDescription: { type: Type.STRING },
+                suggestedAura: { type: Type.STRING },
+                tempoFeeling: {
+                  type: Type.STRING,
+                  enum: ['slow', 'medium', 'fast'],
+                },
+                lines: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      timeSec: { type: Type.NUMBER },
+                      original: { type: Type.STRING },
+                      translated: { type: Type.STRING },
+                    },
+                    required: ['timeSec', 'original', 'translated'],
+                  },
+                },
               },
+              required: [
+                'detectedLanguage',
+                'isInstrumental',
+                'mood',
+                'moodLabel',
+                'moodDescription',
+                'suggestedAura',
+                'tempoFeeling',
+                'lines',
+              ],
             },
           },
-          required: [
-            'detectedLanguage',
-            'isInstrumental',
-            'mood',
-            'moodLabel',
-            'moodDescription',
-            'suggestedAura',
-            'tempoFeeling',
-            'lines',
-          ],
-        },
-      },
-    });
+        };
+      };
 
-    const parsed = JSON.parse((structuredResponse.text ?? '{}').trim()) as Record<string, unknown>;
-    let finalLines = normalizeAndClampLines(parsed.lines, trackDuration);
+    const modelOrder = ['gemini-3.1-flash-lite', 'gemini-4-hydrogen'];
+    let structuredResponse;
+    try {
+      structuredResponse = await generateWithFallback(ai, modelOrder, (model) =>
+        buildAnalyzeParams(model, true)
+      );
+    } catch (primaryErr) {
+      const errInfo = getErrorStatusAndFriendlyMessage(primaryErr);
+      // If inline audio container itself was rejected (400) and we have pasted lyrics or draft text, retry text-only
+      if (errInfo.isAudioInvalidArg && audioPart && (isManualSyncMode || transcribedDraft)) {
+        structuredResponse = await generateWithFallback(ai, modelOrder, (model) =>
+          buildAnalyzeParams(model, false)
+        );
+      } else {
+        throw primaryErr;
+      }
+    }
 
-    // Guarantee pasted lines are never lost or altered if the model returned slightly mismatched original strings
-    if (isManualSyncMode && finalLines.length === pastedEntries.length) {
-      finalLines = finalLines.map((line, i) => ({
-        timeSec: line.timeSec,
-        original: pastedEntries[i].text,
-        translated: line.translated || pastedEntries[i].text,
-      }));
+    const parsed = extractJsonObject<Record<string, unknown>>(structuredResponse.text);
+    let finalLines: LyricLineOut[];
+
+    if (isManualSyncMode) {
+      const rawArr = Array.isArray(parsed.lines) ? parsed.lines : [];
+      const mapped = new Map<number, { timeSec: number; translated: string }>();
+
+      rawArr.forEach((item, arrPos) => {
+        const rec = (item && typeof item === 'object' ? item : {}) as {
+          index?: unknown;
+          timeSec?: unknown;
+          translated?: unknown;
+        };
+        const idx =
+          typeof rec.index === 'number' && rec.index >= 0 && rec.index < pastedEntries.length
+            ? rec.index
+            : arrPos;
+        if (idx >= 0 && idx < pastedEntries.length) {
+          const tVal = Number(rec.timeSec);
+          mapped.set(idx, {
+            timeSec: Number.isFinite(tVal) ? Math.max(0, Math.min(trackDuration, tVal)) : -1,
+            translated: String(rec.translated ?? '').trim(),
+          });
+        }
+      });
+
+      // Ensure every pasted line exists in ascending order; fill any missing translations if needed
+      let prevTime = 0;
+      const missingIndices: number[] = [];
+      finalLines = pastedEntries.map((entry, idx) => {
+        const hit = mapped.get(idx);
+        let tSec =
+          hit && hit.timeSec >= 0
+            ? hit.timeSec
+            : entry.lrcTimeSec !== undefined
+              ? entry.lrcTimeSec
+              : (trackDuration * (idx + 0.5)) / Math.max(1, pastedEntries.length + 1);
+        tSec = Math.max(prevTime, Math.min(trackDuration, tSec));
+        prevTime = tSec;
+        const translated = hit?.translated || '';
+        if (!translated) missingIndices.push(idx);
+        return {
+          timeSec: Number(tSec.toFixed(2)),
+          original: entry.text,
+          translated: translated || entry.text,
+        };
+      });
+
+      if (missingIndices.length > 0) {
+        const missingBatch = missingIndices.map((idx) => ({
+          timeSec: finalLines[idx].timeSec,
+          original: pastedEntries[idx].text,
+        }));
+        const filled = await translateLinesInChunks(
+          ai,
+          missingBatch,
+          targetLangName,
+          String(title),
+          String(artist),
+          false
+        );
+        missingIndices.forEach((idx, pos) => {
+          if (filled.lines[pos]?.translated) {
+            finalLines[idx].translated = filled.lines[pos].translated;
+          }
+        });
+      }
+    } else {
+      finalLines = normalizeAndClampLines(parsed.lines, trackDuration);
     }
 
     res.json({
@@ -331,13 +737,8 @@ Tasks:
     });
   } catch (error: unknown) {
     console.error('AI lyrics analysis error:', error);
-    const errMessage = error instanceof Error ? error.message : 'Error analyzing audio with Gemini AI';
-    const status = errMessage.includes('PERMISSION_DENIED') || errMessage.includes('403')
-      ? 403
-      : errMessage.includes('429')
-        ? 429
-        : 500;
-    res.status(status).json({ error: errMessage });
+    const { status, message } = getErrorStatusAndFriendlyMessage(error);
+    res.status(status).json({ error: message });
   }
 });
 
@@ -351,79 +752,36 @@ app.post('/api/ai/translate-lyrics', async (req, res) => {
     } = req.body ?? {};
 
     if (!Array.isArray(lines) || lines.length === 0) {
-      res.status(400).json({ error: 'No lyrics lines provided to translate.' });
+      res.status(400).json({ error: 'No hay líneas de letra para traducir.' });
       return;
     }
 
     const ai = getGeminiClient();
     const targetLangName = LANGUAGE_LABELS[targetLanguage] || 'Spanish (Español)';
-    const inputLines = lines.map(
-      (l: { timeSec?: number; original?: string }, idx: number) => ({
-        index: idx,
-        timeSec: Number.isFinite(Number(l.timeSec)) ? Number(l.timeSec) : 0,
-        original: String(l.original ?? ''),
-      })
+    const inputLines = lines.map((l: { timeSec?: number; original?: string }) => ({
+      timeSec: Number.isFinite(Number(l.timeSec)) ? Number(l.timeSec) : 0,
+      original: String(l.original ?? '').trim(),
+    }));
+
+    const result = await translateLinesInChunks(
+      ai,
+      inputLines,
+      targetLangName,
+      String(title),
+      String(artist),
+      true
     );
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
-      contents: `Translate ALL ${inputLines.length} song lyric lines for "${title}" by "${artist}" completely, faithfully, and poetically into ${targetLangName}.
-CRITICAL: Return ALL ${inputLines.length} lines in exact order. Preserve each "timeSec" and "original" verbatim. Translate every single word/phrase completely into ${targetLangName} without skipping or truncating.
-Also provide a localized 2-3 word "moodLabel" and 1-sentence "moodDescription" in ${targetLangName}.
-
-Lines JSON:
-${JSON.stringify(inputLines)}`,
-      config: {
-        systemInstruction: `You translate every lyric line completely into ${targetLangName}. Never truncate the array, never skip lines, and never translate only fragments of a line.`,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            moodLabel: { type: Type.STRING },
-            moodDescription: { type: Type.STRING },
-            lines: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  timeSec: { type: Type.NUMBER },
-                  original: { type: Type.STRING },
-                  translated: { type: Type.STRING },
-                },
-                required: ['timeSec', 'original', 'translated'],
-              },
-            },
-          },
-          required: ['lines', 'moodLabel', 'moodDescription'],
-        },
-      },
-    });
-
-    const parsed = JSON.parse((response.text ?? '{}').trim()) as {
-      moodLabel?: string;
-      moodDescription?: string;
-      lines?: Array<{ timeSec?: number; original?: string; translated?: string }>;
-    };
-
-    const outputLines = Array.isArray(parsed.lines)
-      ? parsed.lines.map((l, idx) => ({
-          timeSec: inputLines[idx]?.timeSec ?? Number(l.timeSec ?? 0),
-          original: inputLines[idx]?.original ?? String(l.original ?? ''),
-          translated: String(l.translated ?? '').trim() || inputLines[idx]?.original || '',
-        }))
-      : [];
-
     res.json({
-      moodLabel: parsed.moodLabel,
-      moodDescription: parsed.moodDescription,
-      lines: outputLines,
+      moodLabel: result.moodLabel,
+      moodDescription: result.moodDescription,
+      lines: result.lines,
       targetLanguage,
     });
   } catch (error: unknown) {
     console.error('AI lyrics translation error:', error);
-    const errMessage = error instanceof Error ? error.message : 'Error translating lyrics';
-    res.status(500).json({ error: errMessage });
+    const { status, message } = getErrorStatusAndFriendlyMessage(error);
+    res.status(status).json({ error: message });
   }
 });
 
