@@ -464,12 +464,12 @@ const InteractiveFluidOverlayCanvas: React.FC<{
     let rafId = 0;
     let width = window.innerWidth;
     let height = window.innerHeight;
-    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let dpr = Math.min(window.devicePixelRatio || 1, 1.25);
 
     const resize = () => {
       width = window.innerWidth;
       height = window.innerHeight;
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dpr = Math.min(window.devicePixelRatio || 1, 1.25);
       canvas.width = Math.max(1, Math.floor(width * dpr));
       canvas.height = Math.max(1, Math.floor(height * dpr));
       canvas.style.width = `${width}px`;
@@ -677,12 +677,13 @@ const InteractiveFluidOverlayCanvas: React.FC<{
       ctx.lineWidth = 3.4;
       ctx.stroke();
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
-      ctx.lineWidth = 2.0;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.72)';
-      ctx.shadowBlur = 7;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
+      ctx.lineWidth = 4.2;
       ctx.stroke();
-      ctx.shadowBlur = 0;
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.94)';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
 
       // Tiny sparkling bubbles rising smoothly inside the bottom crystal pool
       const tSec = wavePhase * 0.7;
@@ -765,7 +766,14 @@ const InteractiveFluidOverlayCanvas: React.FC<{
     };
 
     const render = (now: number) => {
-      const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
+      if (document.hidden) {
+        return;
+      }
+      if (now - lastTime < 28) {
+        rafId = requestAnimationFrame(render);
+        return;
+      }
+      const dt = Math.min(0.06, Math.max(0.001, (now - lastTime) / 1000));
       lastTime = now;
       const tSec = now / 1000;
 
@@ -869,12 +877,13 @@ const InteractiveFluidOverlayCanvas: React.FC<{
           const y = dm.ny * height;
           const pulse = 0.45 + 0.55 * Math.sin(tSec * 2.5 + dm.phase);
           ctx.beginPath();
-          ctx.arc(x, y, dm.r, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255, 228, 152, ${0.75 * pulse})`;
-          ctx.shadowColor = 'rgba(255, 215, 115, 0.8)';
-          ctx.shadowBlur = 8;
+          ctx.arc(x, y, dm.r * 1.9, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 218, 128, ${0.24 * pulse})`;
           ctx.fill();
-          ctx.shadowBlur = 0;
+          ctx.beginPath();
+          ctx.arc(x, y, dm.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 232, 165, ${0.82 * pulse})`;
+          ctx.fill();
         }
       } else if (filterId === 'snow_crystal') {
         for (const dm of dustMotes) {
@@ -883,22 +892,33 @@ const InteractiveFluidOverlayCanvas: React.FC<{
           const x = (dm.nx + Math.sin(tSec * 1.4 + dm.phase) * 0.025 + curTiltX * 0.06) * width;
           const y = dm.ny * height;
           ctx.beginPath();
-          ctx.arc(x, y, dm.r * 1.15, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
-          ctx.shadowColor = 'rgba(255, 255, 255, 0.78)';
-          ctx.shadowBlur = 6;
+          ctx.arc(x, y, dm.r * 1.9, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
           ctx.fill();
-          ctx.shadowBlur = 0;
+          ctx.beginPath();
+          ctx.arc(x, y, dm.r * 1.1, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.fill();
         }
       }
 
       rafId = requestAnimationFrame(render);
     };
 
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        lastTime = performance.now();
+        cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(render);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     rafId = requestAnimationFrame(render);
 
     return () => {
       cancelAnimationFrame(rafId);
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('resize', resize);
       window.removeEventListener('deviceorientation', handleOrientation);
       window.removeEventListener('devicemotion', handleDeviceMotion);

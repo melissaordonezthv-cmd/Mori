@@ -252,7 +252,7 @@ export const RainyWindowWebGL: React.FC<RainyWindowWebGLProps> = ({ strength }) 
 
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(0x000000, 0);
-    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 1.25));
 
     let width = window.innerWidth;
     let height = window.innerHeight;
@@ -602,9 +602,14 @@ export const RainyWindowWebGL: React.FC<RainyWindowWebGLProps> = ({ strength }) 
 
     const tick = () => {
       if (disposed) return;
+      if (document.hidden) return;
 
       const now = performance.now();
-      const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
+      if (!isSoftwareGl && now - lastTime < 26) {
+        frameId = requestAnimationFrame(tick);
+        return;
+      }
+      const dt = Math.min(0.06, Math.max(0.001, (now - lastTime) / 1000));
       lastTime = now;
       const elapsed = now * 0.001;
 
@@ -854,6 +859,20 @@ export const RainyWindowWebGL: React.FC<RainyWindowWebGLProps> = ({ strength }) 
       }
     };
 
+    const handleVisibility = () => {
+      if (!document.hidden && !disposed) {
+        lastTime = performance.now();
+        cancelAnimationFrame(frameId);
+        window.clearTimeout(frameId);
+        if (isSoftwareGl) {
+          afterDraw(tick);
+        } else {
+          frameId = requestAnimationFrame(tick);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     if (isSoftwareGl) {
       afterDraw(tick);
     } else {
@@ -864,6 +883,7 @@ export const RainyWindowWebGL: React.FC<RainyWindowWebGLProps> = ({ strength }) 
       disposed = true;
       cancelAnimationFrame(frameId);
       window.clearTimeout(frameId);
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('deviceorientation', handleOrientation);
       window.removeEventListener('devicemotion', handleDeviceMotion);

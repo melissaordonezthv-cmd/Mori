@@ -29,7 +29,7 @@ const OUT_OF_LINE_ANIMATIONS = new Set<SongBarAnimationId>([
   'out_heartbeat_ecg',
 ]);
 
-export const SongProgressBar: React.FC<SongProgressBarProps> = ({
+export const SongProgressBar: React.FC<SongProgressBarProps> = React.memo(({
   currentTime,
   duration,
   animation,
@@ -413,4 +413,4 @@ export const SongProgressBar: React.FC<SongProgressBarProps> = ({
       )}
     </div>
   );
-};
+});

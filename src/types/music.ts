@@ -584,7 +584,57 @@ export type AvatarFrameId =
   | 'espresso_gold'
   | 'noir_velvet'
   | 'lavender_dream'
-  | 'honey_bee';
+  | 'honey_bee'
+  | 'prism_aura'
+  | 'crystal_wings'
+  | 'royal_prism_crown'
+  | 'holo_butterfly'
+  | 'diamond_halo'
+  | 'celestial_orbit'
+  | 'neon_nebula'
+  | 'imperial_floral'
+  | 'starlight_tiara'
+  | 'velvet_bow_luxe'
+  | 'aurora_crescent'
+  | 'lotus_sanctuary'
+  | 'symphony_laurel'
+  | 'fairy_wing_filigree'
+  | 'pearl_cathedral'
+  | 'gemstone_octagon'
+  | 'melody_clef_crest'
+  | 'swan_grace_ring'
+  | 'sakura_lanterns'
+  | 'opal_arch_halo'
+  | 'royal_comet_trail'
+  | 'stardust_compass'
+  | 'ribbon_choker_luxe'
+  | 'crystal_snowflake'
+  | 'charmed_hearts_ring'
+  | 'angelic_feather_crown'
+  | 'twin_butterfly_lace'
+  | 'eclipse_sun_moon'
+  | 'botanical_ivy_gold'
+  | 'prism_mosaic_halo'
+  | 'harp_strings_crest'
+  | 'pearl_shell_siren'
+  | 'crown_jewel_scepter'
+  | 'cat_ears_imperial'
+  | 'bunny_tiara_royal'
+  | 'astral_zodiac_ring'
+  | 'diamond_lace_veil'
+  | 'rose_thorn_regal'
+  | 'galactic_ring_nova'
+  | 'dreamcatcher_silk'
+  | 'cherub_wing_lace'
+  | 'emerald_cut_mirror'
+  | 'clover_crown_lucky'
+  | 'serenade_vinyl_halo'
+  | 'aurora_borealis_arc'
+  | 'mythic_phoenix_plume'
+  | 'moonlit_pagoda_ring'
+  | 'infinite_knot_luxe'
+  | 'celestial_empress'
+  | 'morinote_sovereign';
 
 export type CharmStickerId =
   | 'cassette'
@@ -643,10 +693,19 @@ export interface ProfileConfig {
   avatarUrl: string;
   bannerUrl: string;
   avatarFrame: AvatarFrameId;
+  avatarFrameColor?: string;
   nameShape?: NameShapeId;
   activeCharms: CharmStickerId[];
   favoriteGenre: string;
   cityTag: string;
+}
+
+export interface TimeRecordStats {
+  bestSessionSeconds: number;
+  totalSecondsInApp: number;
+  unlockedBadgeIds: string[];
+  unlockedFrameIds: AvatarFrameId[];
+  lastRecordAt?: number;
 }
 
 export type EqPresetId = 'flat' | 'pop' | 'acoustic' | 'bass' | 'vocal' | 'night';
@@ -745,7 +804,7 @@ export interface AppSettings {
   spatialWidth: number;
   playbackSpeed: number;
   backgroundPlaybackEnabled: boolean;
-  autoDetectLyrics: boolean;
+  autoDetectLyrics?: boolean;
   layoutOrientation?: LayoutOrientation;
   nowPlayingVisual?: NowPlayingVisualId;
   nowPlayingColorMode?: 'theme' | 'custom';

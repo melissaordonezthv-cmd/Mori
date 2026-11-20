@@ -639,3 +639,55 @@
   border-radius: 20px !important;
   box-shadow: 0 5px 12px rgba(0, 0, 0, 0.08), 0 2px 0 var(--divider-color), inset 0 2px 0 rgba(255, 255, 255, 0.75) !important;
 }
+
+/* Smooth virtualization for long song libraries so offscreen cards do not heat mobile GPUs */
+.track-card-virtual {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 98px;
+}
+
+@keyframes badge-pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.84);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(3px) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes badge-float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.05);
+  }
+}
+
+@keyframes badge-ring-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.anim-badge-pop {
+  animation: badge-pop-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.anim-badge-float {
+  animation: badge-float 2.8s ease-in-out infinite;
+}
+
+.anim-badge-spin-slow {
+  animation: badge-ring-spin 16s linear infinite;
+}
+

@@ -5,19 +5,464 @@ interface CuteAvatarFrameProps {
   avatarUrl: string;
   displayName: string;
   frame: AvatarFrameId;
+  frameColor?: string;
   size?: 'sm' | 'md' | 'lg';
   alwaysShowFrame?: boolean;
 }
+
+function normalizeHex(hex?: string, fallback = '#F472B6'): string {
+  if (!hex) return fallback;
+  const trimmed = hex.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed;
+  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+    return `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
+  }
+  return fallback;
+}
+
+function tintHex(hex: string, ratioToWhite: number): string {
+  const clean = normalizeHex(hex);
+  const r = parseInt(clean.slice(1, 3), 16);
+  const g = parseInt(clean.slice(3, 5), 16);
+  const b = parseInt(clean.slice(5, 7), 16);
+  const mix = (c: number) =>
+    Math.min(255, Math.max(0, Math.round(c + (255 - c) * ratioToWhite)));
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+function shadeHex(hex: string, ratioToBlack: number): string {
+  const clean = normalizeHex(hex);
+  const r = parseInt(clean.slice(1, 3), 16);
+  const g = parseInt(clean.slice(3, 5), 16);
+  const b = parseInt(clean.slice(5, 7), 16);
+  const mix = (c: number) => Math.max(0, Math.round(c * (1 - ratioToBlack)));
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+type LuxeRingStyle =
+  | 'double'
+  | 'octagon'
+  | 'scallop'
+  | 'braid'
+  | 'prism_hex'
+  | 'celestial_ellipses'
+  | 'arch_cathedral'
+  | 'lace_ring';
+
+type LuxeMotifKind =
+  | 'tiara'
+  | 'velvet_bow'
+  | 'crescent_moon'
+  | 'lotus'
+  | 'laurel'
+  | 'fairy_wings'
+  | 'gems'
+  | 'music_notes'
+  | 'swans'
+  | 'lanterns'
+  | 'snowflakes'
+  | 'hearts'
+  | 'feathers'
+  | 'butterflies'
+  | 'cat_ears'
+  | 'bunny_ears'
+  | 'roses'
+  | 'clovers'
+  | 'vinyl'
+  | 'stars';
+
+interface LuxeFrameSpec {
+  ring: LuxeRingStyle;
+  motif: LuxeMotifKind;
+  accent?: LuxeMotifKind;
+  sparkles: number;
+  rotateOffset?: number;
+}
+
+const LUXE_FRAME_SPECS: Partial<Record<AvatarFrameId, LuxeFrameSpec>> = {
+  starlight_tiara: { ring: 'double', motif: 'tiara', accent: 'stars', sparkles: 6 },
+  velvet_bow_luxe: { ring: 'scallop', motif: 'velvet_bow', accent: 'hearts', sparkles: 4 },
+  aurora_crescent: { ring: 'celestial_ellipses', motif: 'crescent_moon', accent: 'stars', sparkles: 8 },
+  lotus_sanctuary: { ring: 'double', motif: 'lotus', accent: 'gems', sparkles: 4 },
+  symphony_laurel: { ring: 'braid', motif: 'laurel', accent: 'music_notes', sparkles: 6 },
+  fairy_wing_filigree: { ring: 'lace_ring', motif: 'fairy_wings', accent: 'butterflies', sparkles: 6 },
+  pearl_cathedral: { ring: 'arch_cathedral', motif: 'tiara', accent: 'gems', sparkles: 8 },
+  gemstone_octagon: { ring: 'octagon', motif: 'gems', accent: 'stars', sparkles: 8 },
+  melody_clef_crest: { ring: 'double', motif: 'music_notes', accent: 'stars', sparkles: 6 },
+  swan_grace_ring: { ring: 'scallop', motif: 'swans', accent: 'feathers', sparkles: 4 },
+  sakura_lanterns: { ring: 'braid', motif: 'lanterns', accent: 'roses', sparkles: 6 },
+  opal_arch_halo: { ring: 'arch_cathedral', motif: 'gems', accent: 'crescent_moon', sparkles: 6 },
+  royal_comet_trail: { ring: 'celestial_ellipses', motif: 'stars', accent: 'feathers', sparkles: 10 },
+  stardust_compass: { ring: 'octagon', motif: 'stars', accent: 'gems', sparkles: 8, rotateOffset: 22.5 },
+  ribbon_choker_luxe: { ring: 'lace_ring', motif: 'velvet_bow', accent: 'gems', sparkles: 6 },
+  crystal_snowflake: { ring: 'prism_hex', motif: 'snowflakes', accent: 'gems', sparkles: 6 },
+  charmed_hearts_ring: { ring: 'scallop', motif: 'hearts', accent: 'velvet_bow', sparkles: 6 },
+  angelic_feather_crown: { ring: 'double', motif: 'feathers', accent: 'tiara', sparkles: 6 },
+  twin_butterfly_lace: { ring: 'lace_ring', motif: 'butterflies', accent: 'hearts', sparkles: 6 },
+  eclipse_sun_moon: { ring: 'celestial_ellipses', motif: 'crescent_moon', accent: 'lotus', sparkles: 8 },
+  botanical_ivy_gold: { ring: 'braid', motif: 'laurel', accent: 'clovers', sparkles: 4 },
+  prism_mosaic_halo: { ring: 'prism_hex', motif: 'gems', accent: 'stars', sparkles: 8 },
+  harp_strings_crest: { ring: 'arch_cathedral', motif: 'music_notes', accent: 'feathers', sparkles: 6 },
+  pearl_shell_siren: { ring: 'scallop', motif: 'lotus', accent: 'swans', sparkles: 8 },
+  crown_jewel_scepter: { ring: 'octagon', motif: 'tiara', accent: 'gems', sparkles: 8 },
+  cat_ears_imperial: { ring: 'double', motif: 'cat_ears', accent: 'gems', sparkles: 4 },
+  bunny_tiara_royal: { ring: 'lace_ring', motif: 'bunny_ears', accent: 'tiara', sparkles: 6 },
+  astral_zodiac_ring: { ring: 'celestial_ellipses', motif: 'stars', accent: 'crescent_moon', sparkles: 12 },
+  diamond_lace_veil: { ring: 'lace_ring', motif: 'gems', accent: 'snowflakes', sparkles: 8 },
+  rose_thorn_regal: { ring: 'braid', motif: 'roses', accent: 'hearts', sparkles: 4 },
+  galactic_ring_nova: { ring: 'celestial_ellipses', motif: 'stars', accent: 'gems', sparkles: 10, rotateOffset: 15 },
+  dreamcatcher_silk: { ring: 'double', motif: 'feathers', accent: 'crescent_moon', sparkles: 6 },
+  cherub_wing_lace: { ring: 'scallop', motif: 'fairy_wings', accent: 'hearts', sparkles: 6 },
+  emerald_cut_mirror: { ring: 'octagon', motif: 'gems', accent: 'laurel', sparkles: 8 },
+  clover_crown_lucky: { ring: 'braid', motif: 'clovers', accent: 'tiara', sparkles: 6 },
+  serenade_vinyl_halo: { ring: 'double', motif: 'vinyl', accent: 'music_notes', sparkles: 6 },
+  aurora_borealis_arc: { ring: 'arch_cathedral', motif: 'stars', accent: 'fairy_wings', sparkles: 10 },
+  mythic_phoenix_plume: { ring: 'prism_hex', motif: 'feathers', accent: 'lotus', sparkles: 8 },
+  moonlit_pagoda_ring: { ring: 'arch_cathedral', motif: 'lanterns', accent: 'crescent_moon', sparkles: 6 },
+  infinite_knot_luxe: { ring: 'braid', motif: 'hearts', accent: 'gems', sparkles: 8 },
+  celestial_empress: { ring: 'celestial_ellipses', motif: 'tiara', accent: 'fairy_wings', sparkles: 10 },
+  morinote_sovereign: { ring: 'prism_hex', motif: 'tiara', accent: 'music_notes', sparkles: 12 },
+};
+
+const renderMotifFragment = (
+  kind: LuxeMotifKind,
+  pMain: string,
+  pSoft: string,
+  pMid: string,
+  pDeep: string,
+  isSecondary = false
+) => {
+  const scale = isSecondary ? 0.78 : 1;
+  switch (kind) {
+    case 'tiara':
+      return (
+        <g transform={isSecondary ? 'translate(0,95) rotate(180 60 15)' : undefined}>
+          <path d="M38 20 L44 7 L53 15 L60 4 L67 15 L76 7 L82 20 Z" fill={pSoft} stroke={pDeep} strokeWidth="1.9" strokeLinejoin="round" />
+          <circle cx="60" cy="12" r="2.8" fill={pMain} stroke="#FFFFFF" strokeWidth="1" />
+          <circle cx="46" cy="14" r="2" fill={pMain} />
+          <circle cx="74" cy="14" r="2" fill={pMain} />
+        </g>
+      );
+    case 'velvet_bow':
+      return (
+        <g transform={isSecondary ? 'translate(60,104) scale(0.85)' : 'translate(60,15)'}>
+          <path d="M0 0 C-10 -9 -20 -6 -16 3 C-12 8 -4 5 0 1 Z" fill={pMain} stroke={pDeep} strokeWidth="1.5" />
+          <path d="M0 0 C10 -9 20 -6 16 3 C12 8 4 5 0 1 Z" fill={pMain} stroke={pDeep} strokeWidth="1.5" />
+          <path d="M-3 2 L-9 12 L-2 9 Z M3 2 L9 12 L2 9 Z" fill={pMid} stroke={pDeep} strokeWidth="1.2" />
+          <circle cx="0" cy="0.5" r="3.4" fill={pSoft} stroke={pDeep} strokeWidth="1.4" />
+        </g>
+      );
+    case 'crescent_moon':
+      return (
+        <g transform={isSecondary ? 'translate(92,94) scale(0.85)' : 'translate(24,22)'}>
+          <path d="M6 -9 A10 10 0 1 0 12 8 A7.5 7.5 0 0 1 6 -9 Z" fill={pSoft} stroke={pMain} strokeWidth="1.7" />
+          <circle cx="8" cy="-2" r="1.8" fill="#FFFFFF" stroke={pMain} strokeWidth="0.9" />
+        </g>
+      );
+    case 'lotus':
+      return (
+        <g transform={isSecondary ? 'translate(60,106) rotate(180)' : 'translate(60,14)'}>
+          <path d="M0 -10 C5 -4 5 3 0 6 C-5 3 -5 -4 0 -10 Z" fill={pMain} stroke={pDeep} strokeWidth="1.3" />
+          <path d="M0 5 C-8 3 -14 -2 -12 -8 C-6 -6 -2 -1 0 5 Z" fill={pSoft} stroke={pMain} strokeWidth="1.3" />
+          <path d="M0 5 C8 3 14 -2 12 -8 C6 -6 2 -1 0 5 Z" fill={pSoft} stroke={pMain} strokeWidth="1.3" />
+        </g>
+      );
+    case 'laurel':
+      return (
+        <g>
+          {[28, 45, 62, 79].map((deg, idx) => (
+            <g key={`l-${deg}`}>
+              <ellipse cx={14 + idx * 1.4} cy={80 - idx * 14} rx="4.5" ry="2.4" transform={`rotate(${-35 + idx * 8} ${14 + idx * 1.4} ${80 - idx * 14})`} fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+              <ellipse cx={106 - idx * 1.4} cy={80 - idx * 14} rx="4.5" ry="2.4" transform={`rotate(${35 - idx * 8} ${106 - idx * 1.4} ${80 - idx * 14})`} fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+            </g>
+          ))}
+        </g>
+      );
+    case 'fairy_wings':
+      return (
+        <g transform={isSecondary ? 'translate(0,4) scale(0.92)' : undefined}>
+          <path d="M16 54 C2 34 3 58 14 64 C4 70 8 88 22 80 Z" fill={pSoft} stroke={pMain} strokeWidth="1.8" opacity="0.92" />
+          <path d="M104 54 C118 34 117 58 106 64 C116 70 112 88 98 80 Z" fill={pSoft} stroke={pMain} strokeWidth="1.8" opacity="0.92" />
+          <path d="M10 48 L18 58 M110 48 L102 58" stroke="#FFFFFF" strokeWidth="1.2" strokeLinecap="round" />
+        </g>
+      );
+    case 'gems':
+      return (
+        <g>
+          {[0, 90, 180, 270].map((deg) => (
+            <g key={`gem-${deg}`} transform={`rotate(${deg + (isSecondary ? 45 : 0)} 60 60)`}>
+              <polygon points="60,5 64.5,11 60,17 55.5,11" fill={deg % 180 === 0 ? pMain : pSoft} stroke="#FFFFFF" strokeWidth="1.1" />
+            </g>
+          ))}
+        </g>
+      );
+    case 'music_notes':
+      return (
+        <g transform={`scale(${scale})`}>
+          <g transform="translate(18,22)">
+            <path d="M0 10 V-3 L9 -5 V7" fill="none" stroke={pDeep} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="-2.2" cy="10.5" r="2.7" fill={pMain} stroke="#FFFFFF" strokeWidth="0.9" />
+            <circle cx="6.8" cy="8.5" r="2.7" fill={pSoft} stroke={pMain} strokeWidth="1" />
+          </g>
+          <g transform="translate(94,88)">
+            <path d="M0 9 V-2 L7 -4 V6" fill="none" stroke={pDeep} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="-2" cy="9.5" r="2.4" fill={pMain} stroke="#FFFFFF" strokeWidth="0.9" />
+          </g>
+        </g>
+      );
+    case 'swans':
+      return (
+        <g>
+          <path d="M16 78 C11 64 14 48 22 46 C26 45 26 51 22 54 C19 56 21 66 25 74 Z" fill={pSoft} stroke={pMain} strokeWidth="1.5" />
+          <path d="M104 78 C109 64 106 48 98 46 C94 45 94 51 98 54 C101 56 99 66 95 74 Z" fill={pSoft} stroke={pMain} strokeWidth="1.5" />
+        </g>
+      );
+    case 'lanterns':
+      return (
+        <g>
+          <g transform="translate(16,38)">
+            <line x1="0" y1="-10" x2="0" y2="-4" stroke={pDeep} strokeWidth="1.3" />
+            <rect x="-5" y="-4" width="10" height="12" rx="4" fill={pSoft} stroke={pMain} strokeWidth="1.5" />
+            <line x1="0" y1="8" x2="0" y2="14" stroke={pMain} strokeWidth="1.4" />
+          </g>
+          <g transform="translate(104,38)">
+            <line x1="0" y1="-10" x2="0" y2="-4" stroke={pDeep} strokeWidth="1.3" />
+            <rect x="-5" y="-4" width="10" height="12" rx="4" fill={pSoft} stroke={pMain} strokeWidth="1.5" />
+            <line x1="0" y1="8" x2="0" y2="14" stroke={pMain} strokeWidth="1.4" />
+          </g>
+        </g>
+      );
+    case 'snowflakes':
+      return (
+        <g>
+          {[30, 150, 210, 330].map((deg) => (
+            <g key={`sf-${deg}`} transform={`rotate(${deg} 60 60)`}>
+              <path d="M60 5 V15 M56 8 L64 12 M64 8 L56 12" stroke="#FFFFFF" strokeWidth="1.4" strokeLinecap="round" />
+              <circle cx="60" cy="10" r="1.6" fill={pMain} />
+            </g>
+          ))}
+        </g>
+      );
+    case 'hearts':
+      return (
+        <g>
+          {[[26, 24], [94, 24], [60, 108]].map(([x, y], idx) => (
+            <path
+              key={`hrt-${idx}`}
+              transform={`translate(${x},${y}) scale(${isSecondary ? 0.75 : 0.95})`}
+              d="M0 5 C-6 0 -7 -5 -3 -7 C0 -8 0 -4 0 -4 C0 -4 0 -8 3 -7 C7 -5 6 0 0 5 Z"
+              fill={idx === 2 ? pMain : pSoft}
+              stroke={pDeep}
+              strokeWidth="1.3"
+            />
+          ))}
+        </g>
+      );
+    case 'feathers':
+      return (
+        <g>
+          <path d="M12 72 C6 54 12 36 24 28 C20 44 18 58 22 72 Z" fill={pSoft} stroke={pMain} strokeWidth="1.5" />
+          <path d="M108 72 C114 54 108 36 96 28 C100 44 102 58 98 72 Z" fill={pSoft} stroke={pMain} strokeWidth="1.5" />
+        </g>
+      );
+    case 'butterflies':
+      return (
+        <g>
+          <g transform="translate(23,26) rotate(-25) scale(0.85)">
+            <ellipse cx="-5" cy="-3" rx="6" ry="4" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+            <ellipse cx="5" cy="-3" rx="6" ry="4" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+            <ellipse cx="-4" cy="3" rx="4" ry="3" fill={pMid} stroke={pMain} strokeWidth="1.2" />
+            <ellipse cx="4" cy="3" rx="4" ry="3" fill={pMid} stroke={pMain} strokeWidth="1.2" />
+            <rect x="-1" y="-5" width="2" height="10" rx="1" fill={pDeep} />
+          </g>
+          <g transform="translate(97,92) rotate(145) scale(0.8)">
+            <ellipse cx="-5" cy="-3" rx="6" ry="4" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+            <ellipse cx="5" cy="-3" rx="6" ry="4" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+            <rect x="-1" y="-5" width="2" height="9" rx="1" fill={pDeep} />
+          </g>
+        </g>
+      );
+    case 'cat_ears':
+      return (
+        <g>
+          <path d="M24 42 L20 12 L46 26 Z" fill={pSoft} stroke={pMain} strokeWidth="2.2" strokeLinejoin="round" />
+          <path d="M27 36 L24 19 L40 27 Z" fill={pMain} />
+          <path d="M96 42 L100 12 L74 26 Z" fill={pSoft} stroke={pMain} strokeWidth="2.2" strokeLinejoin="round" />
+          <path d="M93 36 L96 19 L80 27 Z" fill={pMain} />
+        </g>
+      );
+    case 'bunny_ears':
+      return (
+        <g>
+          <ellipse cx="40" cy="17" rx="8" ry="17" transform="rotate(-14 40 17)" fill={pSoft} stroke={pMain} strokeWidth="2" />
+          <ellipse cx="40" cy="18" rx="4" ry="10" transform="rotate(-14 40 18)" fill={pMid} />
+          <ellipse cx="80" cy="17" rx="8" ry="17" transform="rotate(14 80 17)" fill={pSoft} stroke={pMain} strokeWidth="2" />
+          <ellipse cx="80" cy="18" rx="4" ry="10" transform="rotate(14 80 18)" fill={pMid} />
+        </g>
+      );
+    case 'roses':
+      return (
+        <g>
+          {[[26, 26], [94, 26], [94, 94]].map(([x, y], i) => (
+            <g key={`rs-${i}`} transform={`translate(${x},${y})`}>
+              <circle cx="0" cy="0" r="6.5" fill={pMain} stroke={pDeep} strokeWidth="1.3" />
+              <path d="M-2.5 -1 C-1 -3.5 3 -2.5 2.5 0.5 C2 3 -2.5 3.5 -2.5 0.5" fill="none" stroke={pSoft} strokeWidth="1.4" strokeLinecap="round" />
+            </g>
+          ))}
+        </g>
+      );
+    case 'clovers':
+      return (
+        <g>
+          {[[24, 26], [96, 94]].map(([x, y], i) => (
+            <g key={`clv-${i}`} transform={`translate(${x},${y}) scale(0.85)`}>
+              <circle cx="0" cy="-4" r="3.5" fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+              <circle cx="4" cy="0" r="3.5" fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+              <circle cx="0" cy="4" r="3.5" fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+              <circle cx="-4" cy="0" r="3.5" fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+            </g>
+          ))}
+        </g>
+      );
+    case 'vinyl':
+      return (
+        <g>
+          <circle cx="60" cy="60" r="53.5" fill="none" stroke={pDeep} strokeWidth="2.4" strokeDasharray="10 4" />
+          <g transform="translate(94,25)">
+            <circle cx="0" cy="0" r="8" fill={pDeep} stroke={pMain} strokeWidth="1.5" />
+            <circle cx="0" cy="0" r="3" fill={pSoft} />
+          </g>
+        </g>
+      );
+    case 'stars':
+    default:
+      return (
+        <g>
+          {[[22, 24], [98, 24], [22, 96], [98, 96]].map(([x, y], idx) => (
+            <path
+              key={`st-${idx}`}
+              transform={`translate(${x},${y}) scale(${isSecondary ? 0.65 : 0.85})`}
+              d="M0 -7 L2 -2 L7 0 L2 2 L0 7 L-2 2 L-7 0 L-2 -2 Z"
+              fill={idx % 2 === 0 ? '#FFFFFF' : pMain}
+              stroke={pDeep}
+              strokeWidth="1"
+            />
+          ))}
+        </g>
+      );
+  }
+};
+
+const LuxeRecordFrameSvg: React.FC<{
+  spec: LuxeFrameSpec;
+  pMain: string;
+  pSoft: string;
+  pMid: string;
+  pDeep: string;
+}> = ({ spec, pMain, pSoft, pMid, pDeep }) => {
+  const rot = spec.rotateOffset ?? 0;
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10"
+      aria-hidden="true"
+    >
+      {/* Ring Geometry */}
+      <g transform={rot ? `rotate(${rot} 60 60)` : undefined}>
+        {spec.ring === 'double' && (
+          <>
+            <circle cx="60" cy="60" r="47.5" fill="none" stroke={pMain} strokeWidth="3.1" />
+            <circle cx="60" cy="60" r="52" fill="none" stroke={pSoft} strokeWidth="1.8" strokeDasharray="5 3" />
+          </>
+        )}
+        {spec.ring === 'octagon' && (
+          <>
+            <polygon points="41,10 79,10 110,41 110,79 79,110 41,110 10,79 10,41" fill="none" stroke={pMain} strokeWidth="2.8" strokeLinejoin="round" />
+            <circle cx="60" cy="60" r="46.5" fill="none" stroke={pSoft} strokeWidth="2" />
+          </>
+        )}
+        {spec.ring === 'scallop' && (
+          <>
+            <circle cx="60" cy="60" r="47.5" fill="none" stroke={pMain} strokeWidth="3" />
+            <circle cx="60" cy="60" r="51.5" fill="none" stroke={pSoft} strokeWidth="3.8" strokeDasharray="1.5 6.5" strokeLinecap="round" />
+          </>
+        )}
+        {spec.ring === 'braid' && (
+          <>
+            <circle cx="60" cy="60" r="47.5" fill="none" stroke={pDeep} strokeWidth="3.2" />
+            <circle cx="60" cy="60" r="50.5" fill="none" stroke={pMid} strokeWidth="2.2" strokeDasharray="7 3" />
+            <circle cx="60" cy="60" r="53" fill="none" stroke={pSoft} strokeWidth="1.2" />
+          </>
+        )}
+        {spec.ring === 'prism_hex' && (
+          <>
+            <polygon points="60,8 106,34 106,86 60,112 14,86 14,34" fill="none" stroke={pMain} strokeWidth="2.6" strokeLinejoin="round" />
+            <polygon points="60,12 102,36 102,84 60,108 18,84 18,36" fill="none" stroke={pSoft} strokeWidth="1.5" strokeLinejoin="round" />
+            <circle cx="60" cy="60" r="46.5" fill="none" stroke={pMid} strokeWidth="2" />
+          </>
+        )}
+        {spec.ring === 'celestial_ellipses' && (
+          <>
+            <ellipse cx="60" cy="60" rx="56" ry="30" transform="rotate(-24 60 60)" fill="none" stroke={pMain} strokeWidth="2.2" />
+            <ellipse cx="60" cy="60" rx="56" ry="30" transform="rotate(24 60 60)" fill="none" stroke={pSoft} strokeWidth="1.8" />
+            <circle cx="60" cy="60" r="46.5" fill="none" stroke={pMid} strokeWidth="2.4" />
+          </>
+        )}
+        {spec.ring === 'arch_cathedral' && (
+          <>
+            <circle cx="60" cy="62" r="47" fill="none" stroke={pMain} strokeWidth="3" />
+            <path d="M14 66 A46 52 0 0 1 106 66" fill="none" stroke={pSoft} strokeWidth="2.2" strokeDasharray="4 2.5" />
+          </>
+        )}
+        {spec.ring === 'lace_ring' && (
+          <>
+            <circle cx="60" cy="60" r="47" fill="none" stroke={pMid} strokeWidth="2.8" />
+            <circle cx="60" cy="60" r="52" fill="none" stroke={pSoft} strokeWidth="3.2" strokeDasharray="2 4.5" strokeLinecap="round" />
+            <circle cx="60" cy="60" r="55" fill="none" stroke={pMain} strokeWidth="1.1" strokeDasharray="1 6" />
+          </>
+        )}
+      </g>
+
+      {/* Primary & Secondary Ornate Motifs */}
+      {renderMotifFragment(spec.motif, pMain, pSoft, pMid, pDeep, false)}
+      {spec.accent && renderMotifFragment(spec.accent, pMain, pSoft, pMid, pDeep, true)}
+
+      {/* Perimeter Sparkles */}
+      {Array.from({ length: spec.sparkles }).map((_, i) => {
+        const deg = (i * 360) / spec.sparkles + 15;
+        const rad = (deg * Math.PI) / 180;
+        const cx = 60 + Math.cos(rad) * 52.5;
+        const cy = 60 + Math.sin(rad) * 52.5;
+        return (
+          <circle
+            key={`spk-${i}`}
+            cx={cx}
+            cy={cy}
+            r={i % 2 === 0 ? 2.1 : 1.4}
+            fill={i % 2 === 0 ? '#FFFFFF' : pMain}
+            stroke={pDeep}
+            strokeWidth="0.7"
+          />
+        );
+      })}
+    </svg>
+  );
+};
 
 export const CuteAvatarFrame: React.FC<CuteAvatarFrameProps> = ({
   avatarUrl,
   displayName,
   frame,
+  frameColor,
   size = 'lg',
   alwaysShowFrame = false,
 }) => {
   const dim = size === 'lg' ? 'w-24 h-24' : size === 'md' ? 'w-14 h-14' : 'w-11 h-11';
   const showDecor = size === 'lg' || size === 'md' || alwaysShowFrame;
+  const pMain = normalizeHex(frameColor, '#F472B6');
+  const pSoft = tintHex(pMain, 0.72);
+  const pMid = tintHex(pMain, 0.35);
+  const pDeep = shadeHex(pMain, 0.28);
 
   return (
     <div className={`relative inline-flex items-center justify-center shrink-0 ${dim}`}>
@@ -825,6 +1270,136 @@ export const CuteAvatarFrame: React.FC<CuteAvatarFrameProps> = ({
         </svg>
       )}
 
+      {/* === PREMIUM / UNIQUE RECORD-UNLOCKABLE CUSTOM-COLOR FRAMES === */}
+
+      {/* 1. Prisma Cristal (prism_aura) */}
+      {showDecor && frame === 'prism_aura' && (
+        <svg viewBox="0 0 120 120" className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10" aria-hidden="true">
+          <circle cx="60" cy="60" r="52" fill="none" stroke={pSoft} strokeWidth="2.2" strokeDasharray="3 3" />
+          <circle cx="60" cy="60" r="47.5" fill="none" stroke={pMain} strokeWidth="3.2" />
+          {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
+            <g key={deg} transform={`rotate(${deg} 60 60)`}>
+              <polygon points="60,3 64,11 60,17 56,11" fill={deg % 90 === 0 ? pMain : pSoft} stroke="#FFFFFF" strokeWidth="1.1" />
+            </g>
+          ))}
+        </svg>
+      )}
+
+      {/* 2. Alas de Cristal (crystal_wings) */}
+      {showDecor && frame === 'crystal_wings' && (
+        <svg viewBox="0 0 120 120" className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10" aria-hidden="true">
+          <path d="M16 54 C1 36 2 62 15 67 C3 74 8 92 24 84 Z" fill={pSoft} stroke={pMain} strokeWidth="2" strokeLinejoin="round" />
+          <path d="M104 54 C119 36 118 62 105 67 C117 74 112 92 96 84 Z" fill={pSoft} stroke={pMain} strokeWidth="2" strokeLinejoin="round" />
+          <circle cx="60" cy="62" r="46.5" fill="none" stroke={pMain} strokeWidth="3" />
+          <circle cx="60" cy="62" r="50.5" fill="none" stroke={pSoft} strokeWidth="1.5" />
+          <path d="M60 11 L65 18 L60 25 L55 18 Z" fill={pMain} stroke="#FFFFFF" strokeWidth="1.3" />
+        </svg>
+      )}
+
+      {/* 3. Corona Suprema (royal_prism_crown) */}
+      {showDecor && frame === 'royal_prism_crown' && (
+        <svg viewBox="0 0 120 120" className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10" aria-hidden="true">
+          <circle cx="60" cy="64" r="47" fill="none" stroke={pMain} strokeWidth="3.4" />
+          <circle cx="60" cy="64" r="51.5" fill="none" stroke={pSoft} strokeWidth="1.8" strokeDasharray="5 2.5" />
+          <path d="M36 22 L42 6 L52 16 L60 3 L68 16 L78 6 L84 22 Z" fill={pSoft} stroke={pDeep} strokeWidth="2" strokeLinejoin="round" />
+          <circle cx="60" cy="14" r="3.4" fill={pMain} stroke="#FFFFFF" strokeWidth="1" />
+          <circle cx="44" cy="16" r="2.3" fill={pMain} />
+          <circle cx="76" cy="16" r="2.3" fill={pMain} />
+          <circle cx="15" cy="64" r="3" fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+          <circle cx="105" cy="64" r="3" fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+        </svg>
+      )}
+
+      {/* 4. Mariposas Prism (holo_butterfly) */}
+      {showDecor && frame === 'holo_butterfly' && (
+        <svg viewBox="0 0 120 120" className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10" aria-hidden="true">
+          <circle cx="60" cy="60" r="47.5" fill="none" stroke={pMid} strokeWidth="2.8" />
+          <circle cx="60" cy="60" r="52" fill="none" stroke={pSoft} strokeWidth="1.4" strokeDasharray="2 5" />
+          <g transform="translate(24,25) rotate(-25)">
+            <ellipse cx="-6" cy="-4" rx="7" ry="5" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+            <ellipse cx="6" cy="-4" rx="7" ry="5" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+            <ellipse cx="-5" cy="4" rx="5" ry="4" fill={pMid} stroke={pMain} strokeWidth="1.2" />
+            <ellipse cx="5" cy="4" rx="5" ry="4" fill={pMid} stroke={pMain} strokeWidth="1.2" />
+            <rect x="-1.2" y="-6" width="2.4" height="12" rx="1.2" fill={pDeep} />
+          </g>
+          <g transform="translate(95,93) rotate(145) scale(0.88)">
+            <ellipse cx="-6" cy="-4" rx="7" ry="5" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+            <ellipse cx="6" cy="-4" rx="7" ry="5" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+            <ellipse cx="-5" cy="4" rx="5" ry="4" fill={pMid} stroke={pMain} strokeWidth="1.2" />
+            <ellipse cx="5" cy="4" rx="5" ry="4" fill={pMid} stroke={pMain} strokeWidth="1.2" />
+            <rect x="-1.2" y="-6" width="2.4" height="12" rx="1.2" fill={pDeep} />
+          </g>
+        </svg>
+      )}
+
+      {/* 5. Diamante Halo (diamond_halo) */}
+      {showDecor && frame === 'diamond_halo' && (
+        <svg viewBox="0 0 120 120" className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10" aria-hidden="true">
+          <polygon points="60,8 106,34 106,86 60,112 14,86 14,34" fill="none" stroke={pMain} strokeWidth="2.8" strokeLinejoin="round" />
+          <circle cx="60" cy="60" r="47" fill="none" stroke={pSoft} strokeWidth="2.2" />
+          <polygon points="60,4 67,13 60,22 53,13" fill={pMain} stroke="#FFFFFF" strokeWidth="1.3" />
+          <polygon points="60,98 66,106 60,114 54,106" fill={pSoft} stroke={pMain} strokeWidth="1.2" />
+          <circle cx="14" cy="60" r="3.2" fill="#FFFFFF" stroke={pMain} strokeWidth="1.5" />
+          <circle cx="106" cy="60" r="3.2" fill="#FFFFFF" stroke={pMain} strokeWidth="1.5" />
+        </svg>
+      )}
+
+      {/* 6. Órbita Celestial (celestial_orbit) */}
+      {showDecor && frame === 'celestial_orbit' && (
+        <svg viewBox="0 0 120 120" className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10" aria-hidden="true">
+          <ellipse cx="60" cy="60" rx="56" ry="30" transform="rotate(-22 60 60)" fill="none" stroke={pMain} strokeWidth="2.4" />
+          <ellipse cx="60" cy="60" rx="56" ry="30" transform="rotate(22 60 60)" fill="none" stroke={pSoft} strokeWidth="2" />
+          <circle cx="60" cy="60" r="46" fill="none" stroke={pMid} strokeWidth="2.4" />
+          <path d="M98 20a8 8 0 103 14 6.5 6.5 0 01-3-14z" fill={pSoft} stroke={pDeep} strokeWidth="1.4" />
+          <path d="M22 92 L25 97 L30 99 L25 101 L22 106 L19 101 L14 99 L19 97 Z" fill={pMain} stroke="#FFFFFF" strokeWidth="1" />
+        </svg>
+      )}
+
+      {/* 7. Nebulosa Única (neon_nebula) */}
+      {showDecor && frame === 'neon_nebula' && (
+        <svg viewBox="0 0 120 120" className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10" aria-hidden="true">
+          <circle cx="60" cy="60" r="53" fill="none" stroke={pSoft} strokeWidth="4" opacity="0.65" />
+          <circle cx="60" cy="60" r="48.5" fill="none" stroke={pMain} strokeWidth="3.2" />
+          <circle cx="60" cy="60" r="44.5" fill="none" stroke="#FFFFFF" strokeWidth="1.3" opacity="0.9" />
+          {[18, 72, 138, 198, 265, 322].map((deg, idx) => (
+            <circle
+              key={deg}
+              cx={60 + Math.cos((deg * Math.PI) / 180) * 53}
+              cy={60 + Math.sin((deg * Math.PI) / 180) * 53}
+              r={idx % 2 === 0 ? 3.5 : 2.3}
+              fill={idx % 2 === 0 ? '#FFFFFF' : pMain}
+              stroke={pDeep}
+              strokeWidth="1"
+            />
+          ))}
+        </svg>
+      )}
+
+      {/* 8. Imperial Único (imperial_floral) */}
+      {showDecor && frame === 'imperial_floral' && (
+        <svg viewBox="0 0 120 120" className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] pointer-events-none z-10" aria-hidden="true">
+          <circle cx="60" cy="60" r="47.5" fill="none" stroke={pDeep} strokeWidth="3.2" />
+          <circle cx="60" cy="60" r="52" fill="none" stroke={pMain} strokeWidth="2.2" strokeDasharray="6 3" />
+          {[0, 60, 120, 180, 240, 300].map((deg) => (
+            <g key={deg} transform={`rotate(${deg} 60 60)`}>
+              <circle cx="60" cy="10" r="5.5" fill={pSoft} stroke={pMain} strokeWidth="1.4" />
+              <circle cx="60" cy="10" r="2.2" fill={pMain} />
+            </g>
+          ))}
+        </svg>
+      )}
+
+      {/* 9..50 Exclusive Record-Unlockable Custom-Color Frames */}
+      {showDecor && LUXE_FRAME_SPECS[frame] && (
+        <LuxeRecordFrameSvg
+          spec={LUXE_FRAME_SPECS[frame]!}
+          pMain={pMain}
+          pSoft={pSoft}
+          pMid={pMid}
+          pDeep={pDeep}
+        />
+      )}
+
       <div
         className="w-full h-full rounded-full overflow-hidden border-2 shadow-sm flex items-center justify-center"
         style={{
@@ -1217,4 +1792,54 @@ export const FRAME_LABELS: Record<AvatarFrameId, string> = {
   noir_velvet: 'Terciopelo Noir',
   lavender_dream: 'Lavanda Real',
   honey_bee: 'Miel Abejita',
+  prism_aura: 'Prisma Cristal',
+  crystal_wings: 'Alas de Cristal',
+  royal_prism_crown: 'Corona Suprema',
+  holo_butterfly: 'Mariposas Prism',
+  diamond_halo: 'Diamante Halo',
+  celestial_orbit: 'Órbita Celestial',
+  neon_nebula: 'Nebulosa Única',
+  imperial_floral: 'Imperial Único',
+  starlight_tiara: 'Tiara Estelar',
+  velvet_bow_luxe: 'Moño Imperial',
+  aurora_crescent: 'Luna Aurora',
+  lotus_sanctuary: 'Loto Dorado',
+  symphony_laurel: 'Laurel Sinfonía',
+  fairy_wing_filigree: 'Alas de Hada',
+  pearl_cathedral: 'Catedral Perla',
+  gemstone_octagon: 'Gema Octágono',
+  melody_clef_crest: 'Clave Melódica',
+  swan_grace_ring: 'Cisne Real',
+  sakura_lanterns: 'Faroles Sakura',
+  opal_arch_halo: 'Arco de Ópalo',
+  royal_comet_trail: 'Cometa Real',
+  stardust_compass: 'Brújula Estelar',
+  ribbon_choker_luxe: 'Lazo Rococó',
+  crystal_snowflake: 'Cristal Glacial',
+  charmed_hearts_ring: 'Corazones Joya',
+  angelic_feather_crown: 'Corona Plumaje',
+  twin_butterfly_lace: 'Encaje Mariposa',
+  eclipse_sun_moon: 'Eclipse Místico',
+  botanical_ivy_gold: 'Hiedra Botánica',
+  prism_mosaic_halo: 'Mosaico Prisma',
+  harp_strings_crest: 'Arpa Celestial',
+  pearl_shell_siren: 'Concha Perla',
+  crown_jewel_scepter: 'Cetro Corona',
+  cat_ears_imperial: 'Gato Imperial',
+  bunny_tiara_royal: 'Conejo Real',
+  astral_zodiac_ring: 'Anillo Astral',
+  diamond_lace_veil: 'Velo Diamante',
+  rose_thorn_regal: 'Rosa Regia',
+  galactic_ring_nova: 'Supernova',
+  dreamcatcher_silk: 'Atrapasueños',
+  cherub_wing_lace: 'Alas Querubín',
+  emerald_cut_mirror: 'Espejo Esmeralda',
+  clover_crown_lucky: 'Trébol Real',
+  serenade_vinyl_halo: 'Vinilo Dorado',
+  aurora_borealis_arc: 'Aurora Boreal',
+  mythic_phoenix_plume: 'Pluma Fénix',
+  moonlit_pagoda_ring: 'Luna Imperial',
+  infinite_knot_luxe: 'Nudo Infinito',
+  celestial_empress: 'Emperatriz Estelar',
+  morinote_sovereign: 'Soberano MoriNote',
 };

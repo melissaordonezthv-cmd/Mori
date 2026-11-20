@@ -27,7 +27,7 @@ interface BottomPlayerBarProps {
   onToggleFloating: () => void;
 }
 
-export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
+export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = React.memo(({
   track,
   isPlaying,
   currentTime,
@@ -71,6 +71,7 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
           <img
             src={track.coverUrl}
             alt={track.title}
+            decoding="async"
             referrerPolicy="no-referrer"
             className="w-11 h-11 rounded-xl object-cover shrink-0 border"
             style={{ borderColor: 'var(--divider-color)' }}
@@ -140,4 +141,4 @@ export const BottomPlayerBar: React.FC<BottomPlayerBarProps> = ({
       </div>
     </div>
   );
-};
+});

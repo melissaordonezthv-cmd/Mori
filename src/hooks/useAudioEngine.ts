@@ -422,11 +422,14 @@ export function useAudioEngine({
     }
   }, [currentTrackId, ensureWebAudioGraph, loadAndPlayTrack, tracks]);
 
+  const lastTimeEmitRef = useRef<number>(0);
+
   const seekTo = useCallback((sec: number) => {
     const audio = audioRef.current;
     if (!audio || !Number.isFinite(sec)) return;
     const clamped = Math.max(0, Math.min(audio.duration || 0, sec));
     audio.currentTime = clamped;
+    lastTimeEmitRef.current = clamped;
     setCurrentTime(clamped);
   }, []);
 
@@ -487,16 +490,23 @@ export function useAudioEngine({
     await loadAndPlayTrack(q[prevIdx], q);
   }, [currentTrackId, getActiveQueue, loadAndPlayTrack, seekTo]);
 
-  // Attach audio element listeners
+  // Attach audio element listeners (throttled timeupdate prevents 5Hz full-app re-render churn)
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime || 0);
+    const onTimeUpdate = () => {
+      const t = audio.currentTime || 0;
+      if (Math.abs(t - lastTimeEmitRef.current) >= 0.28 || t === 0) {
+        lastTimeEmitRef.current = t;
+        setCurrentTime(t);
+      }
+    };
     const onLoadedMetadata = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onEnded = () => {
+      lastTimeEmitRef.current = 0;
       playNext(true);
     };
 
@@ -532,7 +542,7 @@ export function useAudioEngine({
     return () => window.clearTimeout(timer);
   }, [sleepMinutesRemaining]);
 
-  // Media Session API for background / lock-screen / over-other-apps control
+  // Media Session API: register metadata and action handlers only when track or handlers change
   useEffect(() => {
     if (!('mediaSession' in navigator) || !backgroundPlaybackEnabled) return;
 
@@ -546,8 +556,6 @@ export function useAudioEngine({
           : [],
       });
     }
-
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 
     navigator.mediaSession.setActionHandler('play', () => {
       if (audioRef.current?.paused) togglePlay();
@@ -575,21 +583,6 @@ export function useAudioEngine({
       seekTo((audioRef.current?.currentTime ?? 0) + offset);
     });
 
-    if (typeof navigator.mediaSession.setPositionState === 'function') {
-      const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : currentTrack?.duration || 0;
-      if (safeDuration > 0) {
-        try {
-          navigator.mediaSession.setPositionState({
-            duration: safeDuration,
-            playbackRate: playbackSpeed || 1,
-            position: Math.min(safeDuration, Math.max(0, currentTime)),
-          });
-        } catch {
-          // Ignore transient duration mismatches
-        }
-      }
-    }
-
     return () => {
       try {
         navigator.mediaSession.setActionHandler('play', null);
@@ -605,16 +598,42 @@ export function useAudioEngine({
     };
   }, [
     backgroundPlaybackEnabled,
-    currentTime,
     currentTrack,
-    duration,
-    isPlaying,
-    playbackSpeed,
     playNext,
     playPrev,
     seekTo,
     togglePlay,
   ]);
+
+  // Update Media Session playbackState & throttled positionState without tearing down handlers
+  const lastMediaSessionPosSyncRef = useRef<number>(0);
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !backgroundPlaybackEnabled) return;
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+  }, [backgroundPlaybackEnabled, isPlaying]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !backgroundPlaybackEnabled) return;
+    if (typeof navigator.mediaSession.setPositionState !== 'function') return;
+
+    const now = performance.now();
+    if (now - lastMediaSessionPosSyncRef.current < 1800 && currentTime > 0.5) return;
+    lastMediaSessionPosSyncRef.current = now;
+
+    const safeDuration =
+      Number.isFinite(duration) && duration > 0 ? duration : currentTrack?.duration || 0;
+    if (safeDuration > 0) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: safeDuration,
+          playbackRate: playbackSpeed || 1,
+          position: Math.min(safeDuration, Math.max(0, currentTime)),
+        });
+      } catch {
+        // Ignore transient duration mismatches
+      }
+    }
+  }, [backgroundPlaybackEnabled, currentTime, currentTrack?.duration, duration, playbackSpeed]);
 
   const removeFromQueue = useCallback((trackId: string) => {
     setQueueIds((prev) => prev.filter((id) => id !== trackId));

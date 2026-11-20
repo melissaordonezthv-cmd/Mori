@@ -1,7 +1,35 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, Check, Crop, Edit3, Heart, Share2, Sparkles, X } from 'lucide-react';
+import {
+  Award,
+  Camera,
+  Check,
+  Clock,
+  Crop,
+  Edit3,
+  Heart,
+  Palette,
+  Share2,
+  Sparkles,
+  Trophy,
+  X,
+} from 'lucide-react';
 import type { Translations } from '../constants/i18n';
-import type { AvatarFrameId, CharmStickerId, NameShapeId, ProfileConfig } from '../types/music';
+import {
+  CUSTOM_FRAME_COLORS,
+  formatRecordMinutesLabel,
+  PREMIUM_FRAME_IDS,
+  PREMIUM_FRAME_REQUIRED_MINUTES,
+  PREMIUM_FRAME_REWARDS,
+  PREMIUM_FRAME_SET,
+  RECORD_BADGES,
+} from '../constants/records';
+import type {
+  AvatarFrameId,
+  CharmStickerId,
+  NameShapeId,
+  ProfileConfig,
+  TimeRecordStats,
+} from '../types/music';
 import {
   CHARM_LABELS,
   CharmIcon,
@@ -9,6 +37,7 @@ import {
   FRAME_LABELS,
 } from './CuteAvatarFrame';
 import { ImageEditorModal } from './ImageEditorModal';
+import { PreciousBadgeMedal } from './PreciousBadgeMedal';
 
 interface ProfileModalProps {
   open: boolean;
@@ -19,6 +48,9 @@ interface ProfileModalProps {
     lossless: number;
     totalPlays: number;
   };
+  records: TimeRecordStats;
+  sessionSeconds: number;
+  unlockedFrameIds: AvatarFrameId[];
   t: Translations;
   onChange: (next: ProfileConfig) => void;
   onShareLink: () => void;
@@ -26,6 +58,7 @@ interface ProfileModalProps {
 }
 
 const FRAME_OPTIONS: AvatarFrameId[] = [
+  ...PREMIUM_FRAME_IDS,
   'sakura',
   'double_sakura',
   'bunny',
@@ -559,16 +592,30 @@ const ProfileNamePlaque: React.FC<ProfileNamePlaqueProps> = ({ profile, shape })
   );
 };
 
+function formatCompactTime(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds));
+  const hrs = Math.floor(safe / 3600);
+  const mins = Math.floor((safe % 3600) / 60);
+  const secs = safe % 60;
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  if (mins > 0) return `${mins} min ${secs.toString().padStart(2, '0')}s`;
+  return `${secs}s`;
+}
+
 export const ProfileModal: React.FC<ProfileModalProps> = ({
   open,
   profile,
   stats,
+  records,
+  sessionSeconds,
+  unlockedFrameIds,
   t,
   onChange,
   onShareLink,
   onClose,
 }) => {
   const [editing, setEditing] = useState(false);
+  const [showRecordsPanel, setShowRecordsPanel] = useState(false);
   const [pendingPhoto, setPendingPhoto] = useState<{
     src: string;
     isBlob: boolean;
@@ -646,6 +693,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 avatarUrl={profile.avatarUrl}
                 displayName={profile.displayName}
                 frame={profile.avatarFrame}
+                frameColor={profile.avatarFrameColor}
                 size="md"
                 alwaysShowFrame
               />
@@ -709,6 +757,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   avatarUrl={profile.avatarUrl}
                   displayName={profile.displayName}
                   frame={profile.avatarFrame}
+                  frameColor={profile.avatarFrameColor}
                   size="lg"
                 />
                 <input
@@ -809,6 +858,288 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </div>
             ))}
           </div>
+
+          {/* Game-like Time Records: 50 Unique Custom-Color Frames (every 5 min) & 22 Precious Badges */}
+          {(() => {
+            const bestMin = Math.floor(records.bestSessionSeconds / 60);
+            const curMin = Math.floor(sessionSeconds / 60);
+            const totalMin = Math.floor(records.totalSecondsInApp / 60);
+            const unlockedSet = new Set(records.unlockedBadgeIds);
+            const unlockedFrameSet = new Set(unlockedFrameIds);
+            const nextFrameReward =
+              PREMIUM_FRAME_REWARDS.find((f) => !unlockedFrameSet.has(f.frameId)) ?? null;
+            const nextBadge = RECORD_BADGES.find((b) => !unlockedSet.has(b.id)) ?? null;
+            const activeFrameColor = profile.avatarFrameColor || '#F472B6';
+
+            return (
+              <div
+                className="mt-4 rounded-2xl border p-4 space-y-3"
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  borderColor: 'var(--divider-color)',
+                }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border"
+                      style={{
+                        backgroundColor: 'var(--accent-soft)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      <Trophy className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-extrabold font-mono-nums">
+                          Récord: {formatRecordMinutesLabel(bestMin)}
+                        </span>
+                        <span
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                          style={{
+                            backgroundColor: 'var(--bg-elevated)',
+                            borderColor: 'var(--divider-color)',
+                          }}
+                        >
+                          {records.unlockedBadgeIds.length}/{RECORD_BADGES.length} insignias
+                        </span>
+                        <span
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                          style={{
+                            backgroundColor: 'var(--bg-elevated)',
+                            borderColor: 'var(--divider-color)',
+                          }}
+                        >
+                          {unlockedFrameIds.length}/{PREMIUM_FRAME_REWARDS.length} marcos
+                        </span>
+                      </div>
+                      <p className="text-[11px] mt-0.5 flex flex-wrap items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+                        <span className="inline-flex items-center gap-1 font-mono-nums">
+                          <Clock className="w-3 h-3" />
+                          Sesión: {formatCompactTime(sessionSeconds)}
+                        </span>
+                        <span>·</span>
+                        <span className="font-mono-nums">
+                          Total: {formatRecordMinutesLabel(totalMin)}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowRecordsPanel((v) => !v)}
+                    className="min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0"
+                    style={{
+                      backgroundColor: 'var(--accent-color)',
+                      color: '#1C1B1F',
+                    }}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>{showRecordsPanel ? 'Ocultar récords' : 'Ver récords'}</span>
+                  </button>
+                </div>
+
+                {/* Progress bars toward next 5-min Frame & next Precious Badge */}
+                <div className="space-y-2">
+                  {nextFrameReward && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        <span>
+                          Siguiente marco (cada 5m): <strong style={{ color: 'var(--text-main)' }}>{nextFrameReward.frameLabel}</strong> ({formatRecordMinutesLabel(nextFrameReward.minutes)})
+                        </span>
+                        <span className="font-mono-nums">
+                          {Math.min(curMin, nextFrameReward.minutes)}/{nextFrameReward.minutes}m
+                        </span>
+                      </div>
+                      <div className="h-2 w-full rounded-full overflow-hidden bg-black/10">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              Math.round((sessionSeconds / (nextFrameReward.minutes * 60)) * 100)
+                            )}%`,
+                            backgroundColor: 'var(--accent-color)',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {nextBadge && (
+                    <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      <span>
+                        Siguiente insignia preciosa: <strong style={{ color: 'var(--text-main)' }}>{nextBadge.title}</strong> ({formatRecordMinutesLabel(nextBadge.minutes)})
+                      </span>
+                      <span className="font-mono-nums">
+                        {Math.min(curMin, nextBadge.minutes)}/{nextBadge.minutes}m
+                      </span>
+                    </div>
+                  )}
+
+                  {bestMin >= 5 && curMin <= bestMin && (
+                    <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      Tu tiempo sigue contando incluso mientras escuchas en segundo plano o con pantalla bloqueada. Supera {formatRecordMinutesLabel(bestMin)} para desbloquear más premios.
+                    </p>
+                  )}
+                </div>
+
+                {showRecordsPanel && (
+                  <div
+                    className="pt-3 border-t space-y-5"
+                    style={{ borderColor: 'var(--divider-color)' }}
+                  >
+                    {/* 22 Precious Badges Showcase */}
+                    <div>
+                      <p className="text-xs font-bold mb-2.5 flex items-center gap-1.5">
+                        <Award className="w-3.5 h-3.5" />
+                        <span>
+                          Insignias Preciosas ({records.unlockedBadgeIds.length}/{RECORD_BADGES.length})
+                        </span>
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-80 overflow-y-auto pr-1">
+                        {RECORD_BADGES.map((badge) => {
+                          const earned = unlockedSet.has(badge.id);
+                          return (
+                            <div
+                              key={badge.id}
+                              className="p-2.5 rounded-2xl border flex flex-col items-center text-center gap-1.5 transition"
+                              style={{
+                                backgroundColor: earned
+                                  ? 'var(--bg-elevated)'
+                                  : 'rgba(128,128,128,0.06)',
+                                borderColor: earned ? badge.accentHex : 'var(--divider-color)',
+                                opacity: earned ? 1 : 0.65,
+                              }}
+                            >
+                              <div className={earned ? 'anim-badge-float' : ''}>
+                                <PreciousBadgeMedal badge={badge} earned={earned} size="sm" />
+                              </div>
+                              <p className="text-[11px] font-bold leading-tight truncate w-full">
+                                {badge.title}
+                              </p>
+                              <p className="text-[10px] leading-tight" style={{ color: 'var(--text-muted)' }}>
+                                {earned ? `✓ ${formatRecordMinutesLabel(badge.minutes)}` : `Meta: ${formatRecordMinutesLabel(badge.minutes)}`}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Custom Color Picker + 50 Unique Premium Frames Showcase */}
+                    <div className="space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-bold flex items-center gap-1.5">
+                          <Palette className="w-3.5 h-3.5" />
+                          <span>
+                            50 Marcos Exclusivos (cada 5 min · {unlockedFrameIds.length}/50)
+                          </span>
+                        </p>
+                        <label
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-semibold cursor-pointer"
+                          style={{
+                            backgroundColor: 'var(--bg-elevated)',
+                            borderColor: 'var(--divider-color)',
+                          }}
+                        >
+                          <input
+                            type="color"
+                            value={activeFrameColor}
+                            onChange={(e) =>
+                              onChange({ ...profile, avatarFrameColor: e.target.value })
+                            }
+                            className="w-4 h-4 rounded border-0 p-0 bg-transparent cursor-pointer"
+                          />
+                          <span>Color libre</span>
+                        </label>
+                      </div>
+
+                      {/* Quick Color Swatches */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {CUSTOM_FRAME_COLORS.map((sw) => (
+                          <button
+                            key={sw.hex}
+                            type="button"
+                            title={sw.label}
+                            aria-label={sw.label}
+                            onClick={() => onChange({ ...profile, avatarFrameColor: sw.hex })}
+                            className="btn-raw w-6 h-6 rounded-full border transition-transform hover:scale-110"
+                            style={{
+                              backgroundColor: sw.hex,
+                              borderColor:
+                                activeFrameColor.toLowerCase() === sw.hex.toLowerCase()
+                                  ? 'var(--text-main)'
+                                  : 'rgba(255,255,255,0.75)',
+                              transform:
+                                activeFrameColor.toLowerCase() === sw.hex.toLowerCase()
+                                  ? 'scale(1.16)'
+                                  : undefined,
+                            }}
+                          />
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 max-h-96 overflow-y-auto pr-1">
+                        {PREMIUM_FRAME_REWARDS.map((reward) => {
+                          const unlocked = unlockedFrameSet.has(reward.frameId);
+                          const equipped = profile.avatarFrame === reward.frameId;
+                          return (
+                            <button
+                              key={reward.frameId}
+                              type="button"
+                              disabled={!unlocked}
+                              onClick={() =>
+                                unlocked &&
+                                onChange({
+                                  ...profile,
+                                  avatarFrame: reward.frameId,
+                                  avatarFrameColor: profile.avatarFrameColor || reward.defaultColor,
+                                })
+                              }
+                              className="btn-raw pt-4 pb-2.5 px-2 rounded-2xl border text-[11px] font-medium flex flex-col items-center justify-center gap-2 transition disabled:opacity-55 disabled:cursor-not-allowed"
+                              style={{
+                                backgroundColor: equipped
+                                  ? 'var(--accent-soft)'
+                                  : 'var(--bg-elevated)',
+                                borderColor: equipped
+                                  ? activeFrameColor
+                                  : 'var(--divider-color)',
+                              }}
+                            >
+                              <CuteAvatarFrame
+                                avatarUrl={profile.avatarUrl}
+                                displayName={profile.displayName}
+                                frame={reward.frameId}
+                                frameColor={activeFrameColor}
+                                size="sm"
+                                alwaysShowFrame
+                              />
+                              <span className="truncate max-w-full font-semibold">
+                                {reward.frameLabel}
+                              </span>
+                              <span
+                                className="text-[10px] leading-none"
+                                style={{ color: 'var(--text-muted)' }}
+                              >
+                                {equipped
+                                  ? '✓ Equipado'
+                                  : unlocked
+                                    ? 'Tocar para usar'
+                                    : `🔒 ${formatRecordMinutesLabel(reward.minutes)}`}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Decoration & Profile Editor */}
           {editing && (
@@ -1017,20 +1348,45 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 </div>
               </div>
 
-              {/* Cute Avatar Frame Picker (with Live Sample Miniature on Every Frame!) */}
+              {/* Cute Avatar Frame Picker (with Live Sample Miniature + Unlocked Unique Color Frames!) */}
               <div>
-                <p className="text-xs font-medium mb-2.5">
-                  Marco del avatar ({FRAME_OPTIONS.length}) — vista previa directa en tu foto
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                  <p className="text-xs font-medium">
+                    Marco del avatar ({FRAME_OPTIONS.length}) — vista previa directa en tu foto
+                  </p>
+                  {PREMIUM_FRAME_SET.has(profile.avatarFrame) && (
+                    <label
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-semibold cursor-pointer"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--divider-color)',
+                      }}
+                    >
+                      <input
+                        type="color"
+                        value={profile.avatarFrameColor || '#F472B6'}
+                        onChange={(e) =>
+                          onChange({ ...profile, avatarFrameColor: e.target.value })
+                        }
+                        className="w-4 h-4 rounded border-0 p-0 bg-transparent cursor-pointer"
+                      />
+                      <span>Color del marco</span>
+                    </label>
+                  )}
+                </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
                   {FRAME_OPTIONS.map((frameId) => {
                     const active = profile.avatarFrame === frameId;
+                    const isPremium = PREMIUM_FRAME_SET.has(frameId);
+                    const isUnlocked = !isPremium || unlockedFrameIds.includes(frameId);
+                    const reqMins = PREMIUM_FRAME_REQUIRED_MINUTES[frameId];
                     return (
                       <button
                         key={frameId}
                         type="button"
-                        onClick={() => onChange({ ...profile, avatarFrame: frameId })}
-                        className="btn-raw pt-4 pb-2.5 px-2 rounded-2xl border text-[11px] font-medium transition flex flex-col items-center justify-center gap-2.5 overflow-visible"
+                        disabled={!isUnlocked}
+                        onClick={() => isUnlocked && onChange({ ...profile, avatarFrame: frameId })}
+                        className="btn-raw pt-4 pb-2.5 px-2 rounded-2xl border text-[11px] font-medium transition flex flex-col items-center justify-center gap-2 overflow-visible disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
                           backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-elevated)',
                           borderColor: active ? 'var(--text-main)' : 'var(--divider-color)',
@@ -1040,12 +1396,18 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                           avatarUrl={profile.avatarUrl}
                           displayName={profile.displayName}
                           frame={frameId}
+                          frameColor={profile.avatarFrameColor}
                           size="sm"
                           alwaysShowFrame
                         />
                         <span className="truncate max-w-full leading-tight">
                           {FRAME_LABELS[frameId]}
                         </span>
+                        {isPremium && (
+                          <span className="text-[9px] font-bold leading-none opacity-80">
+                            {isUnlocked ? '✨ Único' : `🔒 ${reqMins}m`}
+                          </span>
+                        )}
                       </button>
                     );
                   })}

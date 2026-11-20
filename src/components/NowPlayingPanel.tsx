@@ -2,11 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Disc3,
   Edit3,
+  FileText,
   Heart,
-  Languages,
   Layers,
   ListMusic,
-  Loader2,
   Pause,
   PictureInPicture2,
   Play,
@@ -16,15 +15,13 @@ import {
   SkipBack,
   SkipForward,
   Sliders,
-  Sparkles,
   Trash2,
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { LANGUAGE_OPTIONS, type Translations } from '../constants/i18n';
+import type { Translations } from '../constants/i18n';
 import { AUDIO_MODE_PROFILES, EQ_PRESETS, MOOD_AURAS } from '../constants/themes';
 import type {
-  AppLanguage,
   AppSettings,
   AudioEngineMode,
   AudioTrack,
@@ -58,8 +55,6 @@ interface NowPlayingPanelProps {
   theme?: ThemeConfig;
   isFloatingOpen: boolean;
   isWidgetOpen: boolean;
-  isAnalyzingLyrics: boolean;
-  aiError: string | null;
   settings: AppSettings;
   analyserRef: React.RefObject<AnalyserNode | null>;
   accentColor: string;
@@ -76,9 +71,8 @@ interface NowPlayingPanelProps {
   onToggleFavorite: (trackId: string) => void;
   onEditTrack: (track: AudioTrack) => void;
   onQuickUpdateCover: (track: AudioTrack, newCoverUrl: string) => void;
-  onDetectLyrics: (track: AudioTrack, manualText?: string) => void;
-  onRetranslateLyrics: (track: AudioTrack, targetLang: AppLanguage) => void;
-  onChangeTargetLanguage: (lang: AppLanguage) => void;
+  onSaveManualLyrics: (track: AudioTrack, rawText: string) => void;
+  onClearLyrics: (track: AudioTrack) => void;
   onPlayTrack: (trackId: string) => void;
   onRemoveFromQueue: (trackId: string) => void;
   onChangeEqPreset: (preset: EqPresetId) => void;
@@ -103,8 +97,6 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   theme,
   isFloatingOpen,
   isWidgetOpen,
-  isAnalyzingLyrics,
-  aiError,
   settings,
   analyserRef,
   accentColor,
@@ -121,9 +113,8 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   onToggleFavorite,
   onEditTrack,
   onQuickUpdateCover,
-  onDetectLyrics,
-  onRetranslateLyrics,
-  onChangeTargetLanguage,
+  onSaveManualLyrics,
+  onClearLyrics,
   onPlayTrack,
   onRemoveFromQueue,
   onChangeEqPreset,
@@ -132,7 +123,6 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   onToggleWidget,
 }) => {
   const [activeTab, setActiveTab] = useState<'lyrics' | 'queue' | 'eq'>('lyrics');
-  const [showOriginalLyrics, setShowOriginalLyrics] = useState(true);
   const [manualLyricsOpen, setManualLyricsOpen] = useState(false);
   const [manualLyricsInput, setManualLyricsInput] = useState('');
   const [pendingQuickCover, setPendingQuickCover] = useState<{
@@ -375,20 +365,6 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
             className="hidden"
             onChange={handleQuickCoverChange}
           />
-
-          {track.lyrics && (
-            <div className="mt-3 text-center">
-              <p className="text-xs font-semibold flex items-center justify-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>
-                  Ánimo: {track.lyrics.moodLabel} · Idioma detectado: {track.lyrics.detectedLanguage}
-                </span>
-              </p>
-              <p className="text-xs mt-0.5 max-w-sm" style={{ color: 'var(--text-muted)' }}>
-                {track.lyrics.moodDescription}
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Real-Time Audio Spectrum */}
@@ -528,7 +504,7 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
               backgroundColor: activeTab === 'lyrics' ? 'var(--bg-elevated)' : 'transparent',
             }}
           >
-            <Languages className="w-3.5 h-3.5" />
+            <FileText className="w-3.5 h-3.5" />
             <span className="whitespace-nowrap">{t.lyricsTab}</span>
           </button>
           <button
@@ -563,139 +539,94 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
-                disabled={isAnalyzingLyrics}
-                onClick={() => onDetectLyrics(track)}
-                className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition disabled:opacity-60"
+                onClick={() => {
+                  if (!manualLyricsOpen && track.lyrics?.lines?.length) {
+                    const existing = track.lyrics.lines.map((l) => l.original).join('\n');
+                    setManualLyricsInput(existing);
+                  } else if (!manualLyricsOpen && !track.lyrics?.lines?.length) {
+                    setManualLyricsInput('');
+                  }
+                  setManualLyricsOpen((v) => !v);
+                }}
+                className="min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
                 style={{
                   backgroundColor: 'var(--accent-color)',
                   color: '#1C1B1F',
                 }}
               >
-                {isAnalyzingLyrics ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="w-3.5 h-3.5" />
-                )}
-                <span>{isAnalyzingLyrics ? t.analyzingAI : t.detectLyricsAI}</span>
+                <FileText className="w-3.5 h-3.5" />
+                <span>
+                  {manualLyricsOpen
+                    ? 'Cerrar editor'
+                    : track.lyrics?.lines?.length
+                      ? 'Editar letra'
+                      : 'Pegar letra'}
+                </span>
               </button>
 
-              <div className="flex items-center gap-2">
-                <select
-                  aria-label="Idioma de traducción instantánea"
-                  value={settings.language}
-                  disabled={isAnalyzingLyrics}
-                  onChange={(e) => {
-                    const nextLang = e.target.value as AppLanguage;
-                    onChangeTargetLanguage(nextLang);
-                    if (track.lyrics) {
-                      onRetranslateLyrics(track, nextLang);
-                    }
+              {track.lyrics && track.lyrics.lines.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearLyrics(track);
+                    setManualLyricsInput('');
+                    setManualLyricsOpen(false);
                   }}
-                  className="min-h-[38px] px-2.5 py-1.5 rounded-xl text-xs font-medium border focus:outline-none"
+                  className="min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-1.5 hover:opacity-80"
+                  style={{
+                    backgroundColor: 'var(--bg-surface)',
+                    borderColor: 'var(--divider-color)',
+                  }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Borrar</span>
+                </button>
+              )}
+            </div>
+
+            {manualLyricsOpen && (
+              <div className="space-y-2">
+                <textarea
+                  rows={5}
+                  value={manualLyricsInput}
+                  onChange={(e) => setManualLyricsInput(e.target.value)}
+                  placeholder="Pega aquí la letra de la canción (admite texto normal o marcas de tiempo [mm:ss])…"
+                  className="w-full p-3 rounded-xl border text-xs focus:outline-none"
                   style={{
                     backgroundColor: 'var(--bg-surface)',
                     borderColor: 'var(--divider-color)',
                     color: 'var(--text-main)',
                   }}
-                >
-                  {LANGUAGE_OPTIONS.map((lang) => (
-                    <option key={lang.id} value={lang.id}>
-                      → {lang.label}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() => setShowOriginalLyrics((v) => !v)}
-                  className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-medium border"
-                  style={{
-                    backgroundColor: 'var(--bg-surface)',
-                    borderColor: 'var(--divider-color)',
-                  }}
-                >
-                  {showOriginalLyrics ? 'Bilingüe' : 'Traducción'}
-                </button>
-              </div>
-            </div>
-
-            {aiError && (
-              <p
-                className="text-xs px-3 py-2 rounded-xl border"
-                style={{
-                  backgroundColor: 'var(--bg-surface)',
-                  borderColor: 'var(--divider-color)',
-                }}
-              >
-                {aiError}
-              </p>
-            )}
-
-            {/* Optional Paste Lyrics Helper */}
-            <div>
-              <button
-                type="button"
-                onClick={() => setManualLyricsOpen((v) => !v)}
-                className="text-xs underline underline-offset-4"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                {manualLyricsOpen
-                  ? 'Ocultar entrada manual'
-                  : '¿Tienes la letra? Pégala para sincronizarla con la canción y traducirla'}
-              </button>
-              {manualLyricsOpen && (
-                <div className="mt-2 space-y-2">
-                  <textarea
-                    rows={5}
-                    value={manualLyricsInput}
-                    onChange={(e) => setManualLyricsInput(e.target.value)}
-                    placeholder="Pega aquí la letra completa en su idioma original (con o sin marcas [mm:ss]). La IA escuchará la canción para sincronizar cada verso y traducirla completa…"
-                    className="w-full p-3 rounded-xl border text-xs focus:outline-none"
-                    style={{
-                      backgroundColor: 'var(--bg-surface)',
-                      borderColor: 'var(--divider-color)',
-                      color: 'var(--text-main)',
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!manualLyricsInput.trim()}
+                    onClick={() => {
+                      onSaveManualLyrics(track, manualLyricsInput);
+                      setManualLyricsOpen(false);
                     }}
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={isAnalyzingLyrics || !manualLyricsInput.trim()}
-                      onClick={() => {
-                        onDetectLyrics(track, manualLyricsInput.trim());
-                        setManualLyricsOpen(false);
-                      }}
-                      className="min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
-                      style={{
-                        backgroundColor: 'var(--accent-color)',
-                        color: '#1C1B1F',
-                      }}
-                    >
-                      {isAnalyzingLyrics ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3.5 h-3.5" />
-                      )}
-                      <span>
-                        {isAnalyzingLyrics
-                          ? 'Sincronizando y traduciendo…'
-                          : 'Sincronizar con el audio y traducir'}
-                      </span>
-                    </button>
-                    {manualLyricsInput.trim() && (
-                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                        {manualLyricsInput.split(/\r?\n/).filter((l) => l.trim()).length} líneas listas
-                      </span>
-                    )}
-                  </div>
+                    className="min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
+                    style={{
+                      backgroundColor: 'var(--accent-color)',
+                      color: '#1C1B1F',
+                    }}
+                  >
+                    <span>Guardar letra</span>
+                  </button>
+                  {manualLyricsInput.trim() && (
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      {manualLyricsInput.split(/\r?\n/).filter((l) => l.trim()).length} líneas listas
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Lyrics Display */}
             <div
               ref={lyricsContainerRef}
-              className="max-h-60 overflow-y-auto rounded-2xl border p-4 space-y-2.5 relative"
+              className="max-h-60 overflow-y-auto rounded-2xl border p-4 space-y-2 relative"
               style={{
                 backgroundColor: 'var(--bg-surface)',
                 borderColor: 'var(--divider-color)',
@@ -704,6 +635,9 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
               {track.lyrics && track.lyrics.lines.length > 0 ? (
                 track.lyrics.lines.map((line, i) => {
                   const isActive = i === activeLineIndex;
+                  const hasTranslation =
+                    Boolean(line.translated?.trim()) &&
+                    line.translated.trim() !== line.original.trim();
                   return (
                     <button
                       key={`${line.timeSec}-${i}`}
@@ -713,34 +647,32 @@ export const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
                       className="w-full text-left rounded-xl px-2.5 py-1.5 transition-all flex items-start gap-2.5"
                       style={{
                         backgroundColor: isActive ? 'var(--accent-soft)' : 'transparent',
-                        opacity: isActive ? 1 : 0.74,
+                        opacity: isActive ? 1 : 0.78,
                       }}
                     >
                       <span
-                        className="text-[10px] font-mono-nums pt-0.5 shrink-0 opacity-70"
+                        className="text-[10px] font-mono-nums pt-0.5 shrink-0 opacity-65"
                         style={{ color: 'var(--text-muted)' }}
                       >
                         {formatDuration(line.timeSec)}
                       </span>
                       <div className="min-w-0 flex-1">
-                        {showOriginalLyrics && (
-                          <p className="text-sm font-semibold leading-snug">{line.original}</p>
+                        <p className="text-sm font-semibold leading-snug">{line.original}</p>
+                        {hasTranslation && (
+                          <p
+                            className="text-xs mt-0.5 leading-snug"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            {line.translated}
+                          </p>
                         )}
-                        <p
-                          className="text-xs mt-0.5 leading-snug"
-                          style={{
-                            color: showOriginalLyrics ? 'var(--text-muted)' : 'var(--text-main)',
-                          }}
-                        >
-                          {line.translated}
-                        </p>
                       </div>
                     </button>
                   );
                 })
               ) : (
                 <p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>
-                  Pulsa “{t.detectLyricsAI}” para que la IA escuche la canción completa, detecte la letra y la traduzca, o pega la letra arriba para sincronizarla con el audio.
+                  Pulsa “Pegar letra” para guardar y ver la letra de esta canción aquí.
                 </p>
               )}
             </div>

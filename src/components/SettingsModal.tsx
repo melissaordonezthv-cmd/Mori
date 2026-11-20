@@ -2233,44 +2233,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {floatingError}
               </p>
             )}
-
-            <div
-              className="pt-3 border-t flex items-center justify-between gap-4"
-              style={{ borderColor: 'var(--divider-color)' }}
-            >
-              <div className="flex items-start gap-3">
-                <Sparkles className="w-4 h-4 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs font-semibold">Detectar y traducir letra automáticamente</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                    Al reproducir una canción nueva sin letra, la IA detecta su idioma, estado de ánimo y traduce al instante
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={settings.autoDetectLyrics}
-                onClick={() =>
-                  onChangeSettings({
-                    ...settings,
-                    autoDetectLyrics: !settings.autoDetectLyrics,
-                  })
-                }
-                className="w-13 h-7 rounded-full p-1 transition-colors shrink-0 flex items-center"
-                style={{
-                  backgroundColor: settings.autoDetectLyrics
-                    ? 'var(--accent-color)'
-                    : 'rgba(128,128,128,0.28)',
-                }}
-              >
-                <span
-                  className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                    settings.autoDetectLyrics ? 'translate-x-6' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
           </section>
 
           {/* Shareable App Link */}

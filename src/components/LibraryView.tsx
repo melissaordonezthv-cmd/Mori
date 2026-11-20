@@ -73,7 +73,7 @@ interface LibraryViewProps {
   onRemoveTrackFromPlaylist: (playlistId: string, trackId: string) => void;
 }
 
-export const LibraryView: React.FC<LibraryViewProps> = ({
+export const LibraryView: React.FC<LibraryViewProps> = React.memo(({
   tracks,
   playlists,
   currentTrackId,
@@ -150,6 +150,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     }
     return list;
   }, [tracks, tab, selectedPlaylist, search]);
+
+  const queueSlice = useMemo(() => filteredTracks.map((tr) => tr.id), [filteredTracks]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -798,7 +800,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 >
                   {filteredTracks.map((track, idx) => {
                     const isCurrent = track.id === currentTrackId;
-                    const queueSlice = filteredTracks.map((tr) => tr.id);
                     const pres = getTrackCardPresentation(
                       trackCardStyleId,
                       trackCardDecorId,
@@ -828,7 +829,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                               ? { paddingTop: '0.9rem', paddingBottom: '0.9rem' }
                               : {}),
                         }}
-                        className={pres.containerClassName}
+                        className={`track-card-virtual ${pres.containerClassName}`}
                       >
                         {pres.topAccentElement}
 
@@ -851,6 +852,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                             <img
                               src={track.coverUrl}
                               alt={track.title}
+                              loading="lazy"
+                              decoding="async"
                               referrerPolicy="no-referrer"
                               className="w-full h-full object-cover"
                             />
@@ -1051,4 +1054,4 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       </div>
     </div>
   );
-};
+});

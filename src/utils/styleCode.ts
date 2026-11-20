@@ -11,6 +11,7 @@ interface StyleBundlePayload {
   theme: Omit<ThemeConfig, 'bannerImageUrl' | 'bannerText'>;
   profileStyle: {
     avatarFrame: ProfileConfig['avatarFrame'];
+    avatarFrameColor?: ProfileConfig['avatarFrameColor'];
     nameShape?: ProfileConfig['nameShape'];
     activeCharms: ProfileConfig['activeCharms'];
   };
@@ -75,6 +76,7 @@ export function encodeStyleCode(
     theme: themeWithoutBanner,
     profileStyle: {
       avatarFrame: profile.avatarFrame,
+      avatarFrameColor: profile.avatarFrameColor,
       nameShape: profile.nameShape,
       activeCharms: Array.isArray(profile.activeCharms) ? profile.activeCharms : [],
     },
@@ -172,6 +174,7 @@ export function decodeStyleCode(
     const nextProfile: ProfileConfig = {
       ...currentProfile,
       avatarFrame: incomingProfile?.avatarFrame ?? currentProfile.avatarFrame,
+      avatarFrameColor: incomingProfile?.avatarFrameColor ?? currentProfile.avatarFrameColor,
       nameShape: incomingProfile?.nameShape ?? currentProfile.nameShape,
       activeCharms: Array.isArray(incomingProfile?.activeCharms)
         ? incomingProfile.activeCharms

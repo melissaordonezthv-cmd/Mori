@@ -11,6 +11,7 @@ import { MusicPermissionModal } from './components/MusicPermissionModal';
 import { NowPlayingPanel } from './components/NowPlayingPanel';
 import { PlaylistModal } from './components/PlaylistModal';
 import { ProfileModal } from './components/ProfileModal';
+import { RecordCelebrationBanner } from './components/RecordCelebrationBanner';
 import { SettingsModal } from './components/SettingsModal';
 import { SoundEffectsModal } from './components/SoundEffectsModal';
 import { ThemeIntroOverlay } from './components/ThemeIntroOverlay';
@@ -36,10 +37,11 @@ import {
 import { useAppUpdate } from './hooks/useAppUpdate';
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { useFloatingMiniPlayer } from './hooks/useFloatingMiniPlayer';
+import { useListeningRecords } from './hooks/useListeningRecords';
 import type {
-  AppLanguage,
   AppSettings,
   AudioTrack,
+  AvatarFrameId,
   EqPresetId,
   LockConfig,
   Playlist,
@@ -54,7 +56,6 @@ import {
   createInstantTrackPlaceholder,
   extractTrackMetadataIntoTrack,
   isSupportedAudioFile,
-  prepareAudioSnippetForAI,
 } from './utils/audioMetadata';
 import {
   deletePlaylistFromDB,
@@ -62,7 +63,6 @@ import {
   getAllPlaylists,
   getAllTracks,
   getMusicDirHandle,
-  getTrackBlob,
   type PersistableDirectoryHandle,
   registerMemoryBlob,
   saveMusicDirHandle,
@@ -152,7 +152,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   spatialWidth: 65,
   playbackSpeed: 1,
   backgroundPlaybackEnabled: true,
-  autoDetectLyrics: true,
   layoutOrientation: 'auto',
   nowPlayingVisual: 'cover_classic',
   nowPlayingColorMode: 'theme',
@@ -222,8 +221,6 @@ export default function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
-  const [isAnalyzingLyrics, setIsAnalyzingLyrics] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [isLocked, setIsLocked] = useState<boolean>(initialHasLock);
   const [showIntro, setShowIntro] = useState<boolean>(!initialHasLock);
@@ -487,6 +484,11 @@ export default function App() {
   });
 
   const appUpdate = useAppUpdate();
+  const listeningRecords = useListeningRecords({
+    isLocked,
+    isPlaying: audio.isPlaying,
+    liveDisplayActive: activeModal === 'profile',
+  });
 
   // Apply CSS variables and dynamic browser edge theme-color whenever theme updates
   useEffect(() => {
@@ -571,7 +573,13 @@ export default function App() {
     onToggleFavorite: handleToggleFavorite,
   });
 
-  const autoAnalyzedIdsRef = useRef<Set<string>>(new Set());
+  const handleEquipRecordFrame = useCallback((frameId: AvatarFrameId, color: string) => {
+    setProfile((prev) => ({
+      ...prev,
+      avatarFrame: frameId,
+      avatarFrameColor: color,
+    }));
+  }, []);
 
   const handleImportFiles = useCallback(
     async (fileList: FileList | File[], silentIfAlreadyPresent = false) => {
@@ -776,7 +784,7 @@ export default function App() {
     }
   };
 
-  const handleLoadSampleTracks = async () => {
+  const handleLoadSampleTracks = useCallback(async () => {
     const starter = generateStarterSampleTracks();
     for (const item of starter.tracks) {
       await saveTrack(item.track, item.blob);
@@ -786,14 +794,14 @@ export default function App() {
       const fresh = starter.tracks.map((s) => s.track).filter((tr) => !existingIds.has(tr.id));
       return [...fresh, ...prev];
     });
-  };
+  }, []);
 
-  const handleSaveEditedTrack = async (updated: AudioTrack) => {
+  const handleSaveEditedTrack = useCallback(async (updated: AudioTrack) => {
     await saveTrack(updated);
     setTracks((prev) => prev.map((tr) => (tr.id === updated.id ? updated : tr)));
-  };
+  }, []);
 
-  const handleDeleteTrack = async (trackId: string) => {
+  const handleDeleteTrack = useCallback(async (trackId: string) => {
     await deleteTrackFromDB(trackId);
     setTracks((prev) => prev.filter((tr) => tr.id !== trackId));
     setPlaylists((prev) =>
@@ -808,201 +816,172 @@ export default function App() {
         return nextPl;
       })
     );
-  };
+  }, []);
 
-  const handleSavePlaylist = async (playlist: Playlist) => {
+  const handleSavePlaylist = useCallback(async (playlist: Playlist) => {
     await savePlaylist(playlist);
     setPlaylists((prev) => {
       const exists = prev.some((p) => p.id === playlist.id);
       return exists ? prev.map((p) => (p.id === playlist.id ? playlist : p)) : [playlist, ...prev];
     });
-  };
+  }, []);
 
-  const handleDeletePlaylist = async (playlistId: string) => {
+  const handleDeletePlaylist = useCallback(async (playlistId: string) => {
     await deletePlaylistFromDB(playlistId);
     setPlaylists((prev) => prev.filter((p) => p.id !== playlistId));
-  };
+  }, []);
 
-  const handleAddTrackToPlaylist = async (playlistId: string, trackId: string) => {
-    const target = playlists.find((p) => p.id === playlistId);
-    if (!target || target.trackIds.includes(trackId)) return;
-    const updated: Playlist = {
-      ...target,
-      trackIds: [...target.trackIds, trackId],
-      updatedAt: Date.now(),
-    };
-    await savePlaylist(updated);
-    setPlaylists((prev) => prev.map((p) => (p.id === playlistId ? updated : p)));
-  };
+  const handleAddTrackToPlaylist = useCallback(
+    async (playlistId: string, trackId: string) => {
+      const target = playlists.find((p) => p.id === playlistId);
+      if (!target || target.trackIds.includes(trackId)) return;
+      const updated: Playlist = {
+        ...target,
+        trackIds: [...target.trackIds, trackId],
+        updatedAt: Date.now(),
+      };
+      await savePlaylist(updated);
+      setPlaylists((prev) => prev.map((p) => (p.id === playlistId ? updated : p)));
+    },
+    [playlists]
+  );
 
-  const handleAddTracksToPlaylist = async (playlistId: string, trackIds: string[]) => {
-    const target = playlists.find((p) => p.id === playlistId);
-    if (!target || trackIds.length === 0) return;
-    const existingSet = new Set(target.trackIds);
-    const additions = trackIds.filter((id) => !existingSet.has(id));
-    if (additions.length === 0) return;
-    const updated: Playlist = {
-      ...target,
-      trackIds: [...target.trackIds, ...additions],
-      updatedAt: Date.now(),
-    };
-    await savePlaylist(updated);
-    setPlaylists((prev) => prev.map((p) => (p.id === playlistId ? updated : p)));
-  };
+  const handleAddTracksToPlaylist = useCallback(
+    async (playlistId: string, trackIds: string[]) => {
+      const target = playlists.find((p) => p.id === playlistId);
+      if (!target || trackIds.length === 0) return;
+      const existingSet = new Set(target.trackIds);
+      const additions = trackIds.filter((id) => !existingSet.has(id));
+      if (additions.length === 0) return;
+      const updated: Playlist = {
+        ...target,
+        trackIds: [...target.trackIds, ...additions],
+        updatedAt: Date.now(),
+      };
+      await savePlaylist(updated);
+      setPlaylists((prev) => prev.map((p) => (p.id === playlistId ? updated : p)));
+    },
+    [playlists]
+  );
 
-  const handleRemoveTrackFromPlaylist = async (playlistId: string, trackId: string) => {
-    const target = playlists.find((p) => p.id === playlistId);
-    if (!target) return;
-    const updated: Playlist = {
-      ...target,
-      trackIds: target.trackIds.filter((id) => id !== trackId),
-      updatedAt: Date.now(),
-    };
-    await savePlaylist(updated);
-    setPlaylists((prev) => prev.map((p) => (p.id === playlistId ? updated : p)));
-  };
+  const handleRemoveTrackFromPlaylist = useCallback(
+    async (playlistId: string, trackId: string) => {
+      const target = playlists.find((p) => p.id === playlistId);
+      if (!target) return;
+      const updated: Playlist = {
+        ...target,
+        trackIds: target.trackIds.filter((id) => id !== trackId),
+        updatedAt: Date.now(),
+      };
+      await savePlaylist(updated);
+      setPlaylists((prev) => prev.map((p) => (p.id === playlistId ? updated : p)));
+    },
+    [playlists]
+  );
 
-  const handleQuickUpdateCover = async (track: AudioTrack, newCoverUrl: string) => {
+  const handleQuickUpdateCover = useCallback(async (track: AudioTrack, newCoverUrl: string) => {
     const updated = { ...track, coverUrl: newCoverUrl };
     await saveTrack(updated);
     setTracks((prev) => prev.map((tr) => (tr.id === updated.id ? updated : tr)));
-  };
+  }, []);
 
-  const handleDetectLyricsAI = useCallback(
-    async (track: AudioTrack, manualText?: string) => {
-      setIsAnalyzingLyrics(true);
-      setAiError(null);
-      try {
-      let audioSnippet: { base64: string; mimeType: string; durationSec?: number } | null = null;
-      const blob = await getTrackBlob(track.id);
-      if (blob) {
-        audioSnippet = await prepareAudioSnippetForAI(blob);
+  const handleSaveManualLyrics = useCallback(
+    async (track: AudioTrack, rawText: string) => {
+      const rawLines = rawText
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      if (rawLines.length === 0) return;
+
+      const lrcRegex = /^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/;
+      const parsedTimestamped: Array<{ timeSec: number; original: string; translated: string }> = [];
+      const plainLines: string[] = [];
+
+      for (const row of rawLines) {
+        const match = row.match(lrcRegex);
+        if (match) {
+          const mins = parseInt(match[1], 10);
+          const secs = parseInt(match[2], 10);
+          const frac = match[3] ? parseInt(match[3].padEnd(3, '0').slice(0, 3), 10) / 1000 : 0;
+          const lyricText = match[4].trim();
+          if (lyricText) {
+            parsedTimestamped.push({
+              timeSec: Math.max(0, mins * 60 + secs + frac),
+              original: lyricText,
+              translated: '',
+            });
+          }
+        } else {
+          plainLines.push(row);
+        }
       }
 
-      const res = await fetch('/api/ai/analyze-lyrics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          duration: track.duration || audioSnippet?.durationSec || 180,
-          targetLanguage: settings.language,
-          audioBase64: audioSnippet?.base64,
-          mimeType: audioSnippet?.mimeType,
-          existingLyrics: manualText,
-        }),
-      });
-
-      const rawResText = await res.text();
-      let data: Record<string, any> = {};
-      try {
-        data = rawResText ? JSON.parse(rawResText) : {};
-      } catch {
-        data = {};
-      }
-      if (!res.ok) {
-        throw new Error(
-          data.error ||
-            `No se pudo analizar la letra con la IA (código ${res.status}). Intenta nuevamente.`
-        );
-      }
+      const totalDuration = Math.max(20, track.duration || audio.duration || 180);
+      const finalLines =
+        parsedTimestamped.length > 0
+          ? parsedTimestamped.sort((a, b) => a.timeSec - b.timeSec)
+          : plainLines.map((text, idx) => {
+              const startSec = Math.min(4, totalDuration * 0.04);
+              const endSec = Math.max(startSec + 4, totalDuration * 0.94);
+              const ratio = plainLines.length <= 1 ? 0 : idx / (plainLines.length - 1);
+              return {
+                timeSec: Math.round((startSec + ratio * (endSec - startSec)) * 10) / 10,
+                original: text,
+                translated: '',
+              };
+            });
 
       const updated: AudioTrack = {
         ...track,
         lyrics: {
-          detectedLanguage: data.detectedLanguage || 'Desconocido',
+          detectedLanguage: 'Manual',
           targetLanguage: settings.language,
-          isInstrumental: Boolean(data.isInstrumental),
-          mood: data.mood || 'serene',
-          moodLabel: data.moodLabel || 'Sereno',
-          moodDescription: data.moodDescription || '',
-          suggestedAura: data.suggestedAura || playerSwatch.accent,
-          tempoFeeling: data.tempoFeeling || 'medium',
-          lines: Array.isArray(data.lines) ? data.lines : [],
+          isInstrumental: false,
+          mood: track.lyrics?.mood || 'serene',
+          moodLabel: 'Letra guardada',
+          moodDescription: '',
+          suggestedAura: playerSwatch.accent,
+          tempoFeeling: 'medium',
+          lines: finalLines,
           updatedAt: Date.now(),
         },
       };
       await saveTrack(updated);
       setTracks((prev) => prev.map((tr) => (tr.id === updated.id ? updated : tr)));
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'Error al conectar con el servicio IA.');
-    } finally {
-      setIsAnalyzingLyrics(false);
-    }
-  }, [playerSwatch.accent, settings.language]);
+    },
+    [audio.duration, playerSwatch.accent, settings.language]
+  );
 
-  // Auto-detect lyrics & musical mood when playing a track without lyrics if enabled
-  useEffect(() => {
-    const tr = audio.currentTrack;
-    if (
-      !settings.autoDetectLyrics ||
-      !audio.isPlaying ||
-      !tr ||
-      tr.isSample ||
-      tr.lyrics ||
-      isAnalyzingLyrics ||
-      autoAnalyzedIdsRef.current.has(tr.id)
-    ) {
-      return;
-    }
-    autoAnalyzedIdsRef.current.add(tr.id);
-    handleDetectLyricsAI(tr);
-  }, [
-    audio.currentTrack,
-    audio.isPlaying,
-    handleDetectLyricsAI,
-    isAnalyzingLyrics,
-    settings.autoDetectLyrics,
-  ]);
+  const handleClearLyrics = useCallback(async (track: AudioTrack) => {
+    const updated: AudioTrack = { ...track, lyrics: undefined };
+    await saveTrack(updated);
+    setTracks((prev) => prev.map((tr) => (tr.id === updated.id ? updated : tr)));
+  }, []);
 
-  const handleRetranslateLyrics = async (track: AudioTrack, targetLang: AppLanguage) => {
-    if (!track.lyrics?.lines?.length) return;
-    setIsAnalyzingLyrics(true);
-    setAiError(null);
-    try {
-      const res = await fetch('/api/ai/translate-lyrics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lines: track.lyrics.lines,
-          targetLanguage: targetLang,
-          title: track.title,
-          artist: track.artist,
-        }),
-      });
-      const rawResText = await res.text();
-      let data: Record<string, any> = {};
-      try {
-        data = rawResText ? JSON.parse(rawResText) : {};
-      } catch {
-        data = {};
-      }
-      if (!res.ok) {
-        throw new Error(
-          data.error || `Error traduciendo la letra (código ${res.status}). Intenta nuevamente.`
-        );
-      }
+  const handlePlayFromLibrary = useCallback(
+    (trackId: string, queueIds?: string[]) => {
+      audio.loadAndPlayTrack(trackId, queueIds);
+    },
+    [audio]
+  );
 
-      const updated: AudioTrack = {
-        ...track,
-        lyrics: {
-          ...track.lyrics,
-          targetLanguage: targetLang,
-          moodLabel: data.moodLabel || track.lyrics.moodLabel,
-          moodDescription: data.moodDescription || track.lyrics.moodDescription,
-          lines: Array.isArray(data.lines) ? data.lines : track.lyrics.lines,
-          updatedAt: Date.now(),
-        },
-      };
-      await saveTrack(updated);
-      setTracks((prev) => prev.map((tr) => (tr.id === updated.id ? updated : tr)));
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'Error al traducir la letra.');
-    } finally {
-      setIsAnalyzingLyrics(false);
-    }
-  };
+  const handleOpenCreatePlaylist = useCallback(() => {
+    setEditingPlaylist(null);
+    setPlaylistModalOpen(true);
+  }, []);
+
+  const handleOpenEditPlaylist = useCallback((pl: Playlist) => {
+    setEditingPlaylist(pl);
+    setPlaylistModalOpen(true);
+  }, []);
+
+  const handleNextTrack = useCallback(() => {
+    audio.playNext(false);
+  }, [audio]);
+
+  const handleOpenMobilePlayer = useCallback(() => {
+    setMobilePlayerOpen(true);
+  }, []);
 
   const handleShareLink = async () => {
     const shareUrl = getShareableAppUrl();
@@ -1132,6 +1111,15 @@ export default function App() {
         textSwatch={textSwatch}
         onComplete={handleIntroComplete}
       />
+
+      <RecordCelebrationBanner
+        event={listeningRecords.celebration}
+        avatarUrl={profile.avatarUrl}
+        displayName={profile.displayName}
+        currentFrameColor={profile.avatarFrameColor}
+        onEquipFrame={handleEquipRecordFrame}
+        onDismiss={listeningRecords.dismissCelebration}
+      />
       {/* Top Bar: 3-line corner hamburger menu + Brand wordmark + Profile/Share */}
       <header
         className="relative shrink-0 z-30 border-b backdrop-blur-md"
@@ -1224,6 +1212,7 @@ export default function App() {
                 avatarUrl={profile.avatarUrl}
                 displayName={profile.displayName}
                 frame={profile.avatarFrame}
+                frameColor={profile.avatarFrameColor}
                 size="sm"
               />
               <span className="hidden md:inline text-xs font-semibold max-w-[110px] truncate">
@@ -1279,19 +1268,13 @@ export default function App() {
             onImportFiles={handleImportFiles}
             onSaveDirHandle={handleSaveDirectoryHandle}
             onLoadSampleTracks={handleLoadSampleTracks}
-            onPlayTrack={(trackId, q) => audio.loadAndPlayTrack(trackId, q)}
+            onPlayTrack={handlePlayFromLibrary}
             onTogglePlay={audio.togglePlay}
             onToggleFavorite={handleToggleFavorite}
-            onEditTrack={(tr) => setEditingTrack(tr)}
+            onEditTrack={setEditingTrack}
             onDeleteTrack={handleDeleteTrack}
-            onCreatePlaylist={() => {
-              setEditingPlaylist(null);
-              setPlaylistModalOpen(true);
-            }}
-            onEditPlaylist={(pl) => {
-              setEditingPlaylist(pl);
-              setPlaylistModalOpen(true);
-            }}
+            onCreatePlaylist={handleOpenCreatePlaylist}
+            onEditPlaylist={handleOpenEditPlaylist}
             onDeletePlaylist={handleDeletePlaylist}
             onAddTrackToPlaylist={handleAddTrackToPlaylist}
             onAddTracksToPlaylist={handleAddTracksToPlaylist}
@@ -1318,15 +1301,13 @@ export default function App() {
               theme={theme}
               isFloatingOpen={floating.isFloatingOpen}
               isWidgetOpen={floating.isWidgetOpen}
-              isAnalyzingLyrics={isAnalyzingLyrics}
-              aiError={aiError}
               settings={settings}
               analyserRef={audio.analyserRef}
               accentColor={playerSwatch.accent}
               compactSplit={isCompactSplit}
               t={t}
               onTogglePlay={audio.togglePlay}
-              onNext={() => audio.playNext(false)}
+              onNext={handleNextTrack}
               onPrev={audio.playPrev}
               onSeek={audio.seekTo}
               onVolumeChange={audio.setVolume}
@@ -1336,14 +1317,11 @@ export default function App() {
                 audio.setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'))
               }
               onToggleFavorite={handleToggleFavorite}
-              onEditTrack={(tr) => setEditingTrack(tr)}
+              onEditTrack={setEditingTrack}
               onQuickUpdateCover={handleQuickUpdateCover}
-              onDetectLyrics={handleDetectLyricsAI}
-              onRetranslateLyrics={handleRetranslateLyrics}
-              onChangeTargetLanguage={(lang) =>
-                setSettings((prev) => ({ ...prev, language: lang }))
-              }
-              onPlayTrack={(id) => audio.loadAndPlayTrack(id)}
+              onSaveManualLyrics={handleSaveManualLyrics}
+              onClearLyrics={handleClearLyrics}
+              onPlayTrack={handlePlayFromLibrary}
               onRemoveFromQueue={audio.removeFromQueue}
               onChangeEqPreset={(preset: EqPresetId) =>
                 setSettings((prev) => ({
@@ -1405,14 +1383,12 @@ export default function App() {
             theme={theme}
             isFloatingOpen={floating.isFloatingOpen}
             isWidgetOpen={floating.isWidgetOpen}
-            isAnalyzingLyrics={isAnalyzingLyrics}
-            aiError={aiError}
             settings={settings}
             analyserRef={audio.analyserRef}
             accentColor={playerSwatch.accent}
             t={t}
             onTogglePlay={audio.togglePlay}
-            onNext={() => audio.playNext(false)}
+            onNext={handleNextTrack}
             onPrev={audio.playPrev}
             onSeek={audio.seekTo}
             onVolumeChange={audio.setVolume}
@@ -1422,14 +1398,11 @@ export default function App() {
               audio.setRepeat((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'))
             }
             onToggleFavorite={handleToggleFavorite}
-            onEditTrack={(tr) => setEditingTrack(tr)}
+            onEditTrack={setEditingTrack}
             onQuickUpdateCover={handleQuickUpdateCover}
-            onDetectLyrics={handleDetectLyricsAI}
-            onRetranslateLyrics={handleRetranslateLyrics}
-            onChangeTargetLanguage={(lang) =>
-              setSettings((prev) => ({ ...prev, language: lang }))
-            }
-            onPlayTrack={(id) => audio.loadAndPlayTrack(id)}
+            onSaveManualLyrics={handleSaveManualLyrics}
+            onClearLyrics={handleClearLyrics}
+            onPlayTrack={handlePlayFromLibrary}
             onRemoveFromQueue={audio.removeFromQueue}
             onChangeEqPreset={(preset: EqPresetId) =>
               setSettings((prev) => ({
@@ -1464,9 +1437,9 @@ export default function App() {
           theme={theme}
           isFloatingOpen={floating.isFloatingOpen}
           onTogglePlay={audio.togglePlay}
-          onNext={() => audio.playNext(false)}
+          onNext={handleNextTrack}
           onPrev={audio.playPrev}
-          onOpenMobilePlayer={() => setMobilePlayerOpen(true)}
+          onOpenMobilePlayer={handleOpenMobilePlayer}
           onToggleFloating={floating.openFloating}
         />
       )}
@@ -1476,6 +1449,9 @@ export default function App() {
         open={activeModal === 'profile'}
         profile={profile}
         stats={stats}
+        records={listeningRecords.records}
+        sessionSeconds={listeningRecords.sessionSeconds}
+        unlockedFrameIds={listeningRecords.unlockedFrameIds}
         t={t}
         onChange={setProfile}
         onShareLink={handleShareLink}

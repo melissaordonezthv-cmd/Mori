@@ -7,13 +7,14 @@ interface AudioVisualizerProps {
   tempoFeeling?: 'slow' | 'medium' | 'fast';
 }
 
-export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
+export const AudioVisualizer: React.FC<AudioVisualizerProps> = React.memo(({
   analyserRef,
   isPlaying,
   accentColor,
   tempoFeeling = 'medium',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const freqBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -24,8 +25,22 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let rafId = 0;
     let phase = 0;
+    let lastDrawTime = 0;
+    let disposed = false;
 
-    const draw = () => {
+    const draw = (now: number) => {
+      if (disposed) return;
+
+      if (isPlaying && !prefersReducedMotion && document.hidden) {
+        return;
+      }
+
+      if (isPlaying && !prefersReducedMotion && lastDrawTime > 0 && now - lastDrawTime < 32) {
+        rafId = requestAnimationFrame(draw);
+        return;
+      }
+      lastDrawTime = now;
+
       const w = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
@@ -35,12 +50,17 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       const barW = (w - gap * (barCount - 1)) / barCount;
 
       let freqData: Uint8Array<ArrayBuffer> | null = null;
-      if (analyserRef.current && isPlaying) {
-        freqData = new Uint8Array(new ArrayBuffer(analyserRef.current.frequencyBinCount));
-        analyserRef.current.getByteFrequencyData(freqData);
+      const analyser = analyserRef.current;
+      if (analyser && isPlaying) {
+        const binCount = analyser.frequencyBinCount;
+        if (!freqBufRef.current || freqBufRef.current.length !== binCount) {
+          freqBufRef.current = new Uint8Array(new ArrayBuffer(binCount));
+        }
+        freqData = freqBufRef.current;
+        analyser.getByteFrequencyData(freqData);
       }
 
-      const speedStep = tempoFeeling === 'fast' ? 0.09 : tempoFeeling === 'slow' ? 0.03 : 0.055;
+      const speedStep = tempoFeeling === 'fast' ? 0.14 : tempoFeeling === 'slow' ? 0.05 : 0.09;
       if (isPlaying && !prefersReducedMotion) phase += speedStep;
 
       ctx.fillStyle = accentColor;
@@ -70,9 +90,20 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       }
     };
 
-    draw();
+    const handleVisibility = () => {
+      if (!document.hidden && isPlaying && !prefersReducedMotion && !disposed) {
+        lastDrawTime = 0;
+        cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(draw);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    rafId = requestAnimationFrame(draw);
     return () => {
+      disposed = true;
       if (rafId) cancelAnimationFrame(rafId);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [analyserRef, isPlaying, accentColor, tempoFeeling]);
 
@@ -85,4 +116,5 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       aria-hidden="true"
     />
   );
-};
+});
+

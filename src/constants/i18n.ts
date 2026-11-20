@@ -48,7 +48,7 @@ export interface Translations {
 
 export const UI_TEXT: Record<AppLanguage, Translations> = {
   es: {
-    appTagline: 'Audio sin pérdida & letras IA',
+    appTagline: 'Audio sin pérdida',
     menuProfile: 'Perfil',
     menuTheme: 'Tema',
     menuSettings: 'Ajustes',
@@ -68,7 +68,7 @@ export const UI_TEXT: Record<AppLanguage, Translations> = {
     loadSampleWav: 'Cargar pistas WAV de muestra',
     dropHint: 'Suelta archivos de audio aquí',
     nowPlaying: 'Reproduciendo',
-    lyricsTab: 'Letra IA',
+    lyricsTab: 'Letra',
     queueTab: 'Cola',
     eqTab: 'Ecualizador',
     detectLyricsAI: 'Detectar y traducir letra',
@@ -94,7 +94,7 @@ export const UI_TEXT: Record<AppLanguage, Translations> = {
     playsCount: 'Escuchas',
   },
   en: {
-    appTagline: 'Lossless audio & AI lyrics',
+    appTagline: 'Lossless audio',
     menuProfile: 'Profile',
     menuTheme: 'Theme',
     menuSettings: 'Settings',
@@ -114,7 +114,7 @@ export const UI_TEXT: Record<AppLanguage, Translations> = {
     loadSampleWav: 'Load sample WAV tracks',
     dropHint: 'Drop audio files here',
     nowPlaying: 'Now Playing',
-    lyricsTab: 'AI Lyrics',
+    lyricsTab: 'Lyrics',
     queueTab: 'Queue',
     eqTab: 'Equalizer',
     detectLyricsAI: 'Detect & translate lyrics',
